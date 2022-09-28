@@ -1,0 +1,182 @@
+<html>
+<head>
+<title>utils.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #6897bb;}
+.s4 { color: #a5c261;}
+.s5 { color: #808080;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+utils.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">base64</span>
+<span class="s0">import </span><span class="s1">binascii</span>
+<span class="s0">import </span><span class="s1">re</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Union</span>
+
+<span class="s0">try</span><span class="s1">:</span>
+    <span class="s0">from </span><span class="s1">cryptography.hazmat.primitives.asymmetric.ec </span><span class="s0">import </span><span class="s1">EllipticCurve</span>
+    <span class="s0">from </span><span class="s1">cryptography.hazmat.primitives.asymmetric.utils </span><span class="s0">import </span><span class="s1">(</span>
+        <span class="s1">decode_dss_signature</span><span class="s0">,</span>
+        <span class="s1">encode_dss_signature</span><span class="s0">,</span>
+    <span class="s1">)</span>
+<span class="s0">except </span><span class="s1">ModuleNotFoundError:</span>
+    <span class="s1">EllipticCurve = </span><span class="s0">None</span>
+
+
+<span class="s0">def </span><span class="s1">force_bytes(value: Union[str</span><span class="s0">, </span><span class="s1">bytes]) -&gt; bytes:</span>
+    <span class="s0">if </span><span class="s1">isinstance(value</span><span class="s0">, </span><span class="s1">str):</span>
+        <span class="s0">return </span><span class="s1">value.encode(</span><span class="s2">&quot;utf-8&quot;</span><span class="s1">)</span>
+    <span class="s0">elif </span><span class="s1">isinstance(value</span><span class="s0">, </span><span class="s1">bytes):</span>
+        <span class="s0">return </span><span class="s1">value</span>
+    <span class="s0">else</span><span class="s1">:</span>
+        <span class="s0">raise </span><span class="s1">TypeError(</span><span class="s2">&quot;Expected a string value&quot;</span><span class="s1">)</span>
+
+
+<span class="s0">def </span><span class="s1">base64url_decode(input: Union[str</span><span class="s0">, </span><span class="s1">bytes]) -&gt; bytes:</span>
+    <span class="s0">if </span><span class="s1">isinstance(input</span><span class="s0">, </span><span class="s1">str):</span>
+        <span class="s1">input = input.encode(</span><span class="s2">&quot;ascii&quot;</span><span class="s1">)</span>
+
+    <span class="s1">rem = len(input) % </span><span class="s3">4</span>
+
+    <span class="s0">if </span><span class="s1">rem &gt; </span><span class="s3">0</span><span class="s1">:</span>
+        <span class="s1">input += </span><span class="s4">b&quot;=&quot; </span><span class="s1">* (</span><span class="s3">4 </span><span class="s1">- rem)</span>
+
+    <span class="s0">return </span><span class="s1">base64.urlsafe_b64decode(input)</span>
+
+
+<span class="s0">def </span><span class="s1">base64url_encode(input: bytes) -&gt; bytes:</span>
+    <span class="s0">return </span><span class="s1">base64.urlsafe_b64encode(input).replace(</span><span class="s4">b&quot;=&quot;</span><span class="s0">, </span><span class="s4">b&quot;&quot;</span><span class="s1">)</span>
+
+
+<span class="s0">def </span><span class="s1">to_base64url_uint(val: int) -&gt; bytes:</span>
+    <span class="s0">if </span><span class="s1">val &lt; </span><span class="s3">0</span><span class="s1">:</span>
+        <span class="s0">raise </span><span class="s1">ValueError(</span><span class="s2">&quot;Must be a positive integer&quot;</span><span class="s1">)</span>
+
+    <span class="s1">int_bytes = bytes_from_int(val)</span>
+
+    <span class="s0">if </span><span class="s1">len(int_bytes) == </span><span class="s3">0</span><span class="s1">:</span>
+        <span class="s1">int_bytes = </span><span class="s4">b&quot;</span><span class="s0">\x00</span><span class="s4">&quot;</span>
+
+    <span class="s0">return </span><span class="s1">base64url_encode(int_bytes)</span>
+
+
+<span class="s0">def </span><span class="s1">from_base64url_uint(val: Union[str</span><span class="s0">, </span><span class="s1">bytes]) -&gt; int:</span>
+    <span class="s0">if </span><span class="s1">isinstance(val</span><span class="s0">, </span><span class="s1">str):</span>
+        <span class="s1">val = val.encode(</span><span class="s2">&quot;ascii&quot;</span><span class="s1">)</span>
+
+    <span class="s1">data = base64url_decode(val)</span>
+    <span class="s0">return </span><span class="s1">int.from_bytes(data</span><span class="s0">, </span><span class="s1">byteorder=</span><span class="s2">&quot;big&quot;</span><span class="s1">)</span>
+
+
+<span class="s0">def </span><span class="s1">number_to_bytes(num: int</span><span class="s0">, </span><span class="s1">num_bytes: int) -&gt; bytes:</span>
+    <span class="s1">padded_hex = </span><span class="s2">&quot;%0*x&quot; </span><span class="s1">% (</span><span class="s3">2 </span><span class="s1">* num_bytes</span><span class="s0">, </span><span class="s1">num)</span>
+    <span class="s0">return </span><span class="s1">binascii.a2b_hex(padded_hex.encode(</span><span class="s2">&quot;ascii&quot;</span><span class="s1">))</span>
+
+
+<span class="s0">def </span><span class="s1">bytes_to_number(string: bytes) -&gt; int:</span>
+    <span class="s0">return </span><span class="s1">int(binascii.b2a_hex(string)</span><span class="s0">, </span><span class="s3">16</span><span class="s1">)</span>
+
+
+<span class="s0">def </span><span class="s1">bytes_from_int(val: int) -&gt; bytes:</span>
+    <span class="s1">remaining = val</span>
+    <span class="s1">byte_length = </span><span class="s3">0</span>
+
+    <span class="s0">while </span><span class="s1">remaining != </span><span class="s3">0</span><span class="s1">:</span>
+        <span class="s1">remaining &gt;&gt;= </span><span class="s3">8</span>
+        <span class="s1">byte_length += </span><span class="s3">1</span>
+
+    <span class="s0">return </span><span class="s1">val.to_bytes(byte_length</span><span class="s0">, </span><span class="s2">&quot;big&quot;</span><span class="s0">, </span><span class="s1">signed=</span><span class="s0">False</span><span class="s1">)</span>
+
+
+<span class="s0">def </span><span class="s1">der_to_raw_signature(der_sig: bytes</span><span class="s0">, </span><span class="s1">curve: EllipticCurve) -&gt; bytes:</span>
+    <span class="s1">num_bits = curve.key_size</span>
+    <span class="s1">num_bytes = (num_bits + </span><span class="s3">7</span><span class="s1">) // </span><span class="s3">8</span>
+
+    <span class="s1">r</span><span class="s0">, </span><span class="s1">s = decode_dss_signature(der_sig)</span>
+
+    <span class="s0">return </span><span class="s1">number_to_bytes(r</span><span class="s0">, </span><span class="s1">num_bytes) + number_to_bytes(s</span><span class="s0">, </span><span class="s1">num_bytes)</span>
+
+
+<span class="s0">def </span><span class="s1">raw_to_der_signature(raw_sig: bytes</span><span class="s0">, </span><span class="s1">curve: EllipticCurve) -&gt; bytes:</span>
+    <span class="s1">num_bits = curve.key_size</span>
+    <span class="s1">num_bytes = (num_bits + </span><span class="s3">7</span><span class="s1">) // </span><span class="s3">8</span>
+
+    <span class="s0">if </span><span class="s1">len(raw_sig) != </span><span class="s3">2 </span><span class="s1">* num_bytes:</span>
+        <span class="s0">raise </span><span class="s1">ValueError(</span><span class="s2">&quot;Invalid signature&quot;</span><span class="s1">)</span>
+
+    <span class="s1">r = bytes_to_number(raw_sig[:num_bytes])</span>
+    <span class="s1">s = bytes_to_number(raw_sig[num_bytes:])</span>
+
+    <span class="s0">return </span><span class="s1">encode_dss_signature(r</span><span class="s0">, </span><span class="s1">s)</span>
+
+
+<span class="s5"># Based on https://github.com/hynek/pem/blob/7ad94db26b0bc21d10953f5dbad3acfdfacf57aa/src/pem/_core.py#L224-L252</span>
+<span class="s1">_PEMS = {</span>
+    <span class="s4">b&quot;CERTIFICATE&quot;</span><span class="s0">,</span>
+    <span class="s4">b&quot;TRUSTED CERTIFICATE&quot;</span><span class="s0">,</span>
+    <span class="s4">b&quot;PRIVATE KEY&quot;</span><span class="s0">,</span>
+    <span class="s4">b&quot;PUBLIC KEY&quot;</span><span class="s0">,</span>
+    <span class="s4">b&quot;ENCRYPTED PRIVATE KEY&quot;</span><span class="s0">,</span>
+    <span class="s4">b&quot;OPENSSH PRIVATE KEY&quot;</span><span class="s0">,</span>
+    <span class="s4">b&quot;DSA PRIVATE KEY&quot;</span><span class="s0">,</span>
+    <span class="s4">b&quot;RSA PRIVATE KEY&quot;</span><span class="s0">,</span>
+    <span class="s4">b&quot;RSA PUBLIC KEY&quot;</span><span class="s0">,</span>
+    <span class="s4">b&quot;EC PRIVATE KEY&quot;</span><span class="s0">,</span>
+    <span class="s4">b&quot;DH PARAMETERS&quot;</span><span class="s0">,</span>
+    <span class="s4">b&quot;NEW CERTIFICATE REQUEST&quot;</span><span class="s0">,</span>
+    <span class="s4">b&quot;CERTIFICATE REQUEST&quot;</span><span class="s0">,</span>
+    <span class="s4">b&quot;SSH2 PUBLIC KEY&quot;</span><span class="s0">,</span>
+    <span class="s4">b&quot;SSH2 ENCRYPTED PRIVATE KEY&quot;</span><span class="s0">,</span>
+    <span class="s4">b&quot;X509 CRL&quot;</span><span class="s0">,</span>
+<span class="s1">}</span>
+
+<span class="s1">_PEM_RE = re.compile(</span>
+    <span class="s4">b&quot;----[- ]BEGIN (&quot;</span>
+    <span class="s1">+ </span><span class="s4">b&quot;|&quot;</span><span class="s1">.join(_PEMS)</span>
+    <span class="s1">+ </span><span class="s4">b&quot;&quot;&quot;)[- ]----</span><span class="s0">\r</span><span class="s4">? 
+.+?</span><span class="s0">\r</span><span class="s4">? 
+----[- ]END </span><span class="s0">\\</span><span class="s4">1[- ]----</span><span class="s0">\r</span><span class="s4">?</span><span class="s0">\n</span><span class="s4">?&quot;&quot;&quot;</span><span class="s0">,</span>
+    <span class="s1">re.DOTALL</span><span class="s0">,</span>
+<span class="s1">)</span>
+
+
+<span class="s0">def </span><span class="s1">is_pem_format(key: bytes) -&gt; bool:</span>
+    <span class="s0">return </span><span class="s1">bool(_PEM_RE.search(key))</span>
+
+
+<span class="s5"># Based on https://github.com/pyca/cryptography/blob/bcb70852d577b3f490f015378c75cba74986297b/src/cryptography/hazmat/primitives/serialization/ssh.py#L40-L46</span>
+<span class="s1">_CERT_SUFFIX = </span><span class="s4">b&quot;-cert-v01@openssh.com&quot;</span>
+<span class="s1">_SSH_PUBKEY_RC = re.compile(</span><span class="s4">rb&quot;\A(\S+)[ \t]+(\S+)&quot;</span><span class="s1">)</span>
+<span class="s1">_SSH_KEY_FORMATS = [</span>
+    <span class="s4">b&quot;ssh-ed25519&quot;</span><span class="s0">,</span>
+    <span class="s4">b&quot;ssh-rsa&quot;</span><span class="s0">,</span>
+    <span class="s4">b&quot;ssh-dss&quot;</span><span class="s0">,</span>
+    <span class="s4">b&quot;ecdsa-sha2-nistp256&quot;</span><span class="s0">,</span>
+    <span class="s4">b&quot;ecdsa-sha2-nistp384&quot;</span><span class="s0">,</span>
+    <span class="s4">b&quot;ecdsa-sha2-nistp521&quot;</span><span class="s0">,</span>
+<span class="s1">]</span>
+
+
+<span class="s0">def </span><span class="s1">is_ssh_key(key: bytes) -&gt; bool:</span>
+    <span class="s0">if </span><span class="s1">any(string_value </span><span class="s0">in </span><span class="s1">key </span><span class="s0">for </span><span class="s1">string_value </span><span class="s0">in </span><span class="s1">_SSH_KEY_FORMATS):</span>
+        <span class="s0">return True</span>
+
+    <span class="s1">ssh_pubkey_match = _SSH_PUBKEY_RC.match(key)</span>
+    <span class="s0">if </span><span class="s1">ssh_pubkey_match:</span>
+        <span class="s1">key_type = ssh_pubkey_match.group(</span><span class="s3">1</span><span class="s1">)</span>
+        <span class="s0">if </span><span class="s1">_CERT_SUFFIX == key_type[-len(_CERT_SUFFIX) :]:</span>
+            <span class="s0">return True</span>
+
+    <span class="s0">return False</span>
+</pre>
+</body>
+</html>

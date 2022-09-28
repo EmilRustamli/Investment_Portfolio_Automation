@@ -1,0 +1,86 @@
+<html>
+<head>
+<title>exceptions.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #629755; font-style: italic;}
+.s3 { color: #6a8759;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+exceptions.py</font>
+</center></td></tr></table>
+<pre><span class="s0">class </span><span class="s1">PyJWTError(Exception):</span>
+    <span class="s2">&quot;&quot;&quot; 
+    Base class for all exceptions 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">pass</span>
+
+
+<span class="s0">class </span><span class="s1">InvalidTokenError(PyJWTError):</span>
+    <span class="s0">pass</span>
+
+
+<span class="s0">class </span><span class="s1">DecodeError(InvalidTokenError):</span>
+    <span class="s0">pass</span>
+
+
+<span class="s0">class </span><span class="s1">InvalidSignatureError(DecodeError):</span>
+    <span class="s0">pass</span>
+
+
+<span class="s0">class </span><span class="s1">ExpiredSignatureError(InvalidTokenError):</span>
+    <span class="s0">pass</span>
+
+
+<span class="s0">class </span><span class="s1">InvalidAudienceError(InvalidTokenError):</span>
+    <span class="s0">pass</span>
+
+
+<span class="s0">class </span><span class="s1">InvalidIssuerError(InvalidTokenError):</span>
+    <span class="s0">pass</span>
+
+
+<span class="s0">class </span><span class="s1">InvalidIssuedAtError(InvalidTokenError):</span>
+    <span class="s0">pass</span>
+
+
+<span class="s0">class </span><span class="s1">ImmatureSignatureError(InvalidTokenError):</span>
+    <span class="s0">pass</span>
+
+
+<span class="s0">class </span><span class="s1">InvalidKeyError(PyJWTError):</span>
+    <span class="s0">pass</span>
+
+
+<span class="s0">class </span><span class="s1">InvalidAlgorithmError(InvalidTokenError):</span>
+    <span class="s0">pass</span>
+
+
+<span class="s0">class </span><span class="s1">MissingRequiredClaimError(InvalidTokenError):</span>
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">claim):</span>
+        <span class="s1">self.claim = claim</span>
+
+    <span class="s0">def </span><span class="s1">__str__(self):</span>
+        <span class="s0">return </span><span class="s3">f'Token is missing the &quot;</span><span class="s0">{</span><span class="s1">self.claim</span><span class="s0">}</span><span class="s3">&quot; claim'</span>
+
+
+<span class="s0">class </span><span class="s1">PyJWKError(PyJWTError):</span>
+    <span class="s0">pass</span>
+
+
+<span class="s0">class </span><span class="s1">PyJWKSetError(PyJWTError):</span>
+    <span class="s0">pass</span>
+
+
+<span class="s0">class </span><span class="s1">PyJWKClientError(PyJWTError):</span>
+    <span class="s0">pass</span>
+</pre>
+</body>
+</html>

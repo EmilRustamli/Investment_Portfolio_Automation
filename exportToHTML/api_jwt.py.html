@@ -1,0 +1,299 @@
+<html>
+<head>
+<title>api_jwt.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #808080;}
+.s4 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+api_jwt.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">__future__ </span><span class="s0">import </span><span class="s1">annotations</span>
+
+<span class="s0">import </span><span class="s1">json</span>
+<span class="s0">import </span><span class="s1">warnings</span>
+<span class="s0">from </span><span class="s1">calendar </span><span class="s0">import </span><span class="s1">timegm</span>
+<span class="s0">from </span><span class="s1">collections.abc </span><span class="s0">import </span><span class="s1">Iterable</span><span class="s0">, </span><span class="s1">Mapping</span>
+<span class="s0">from </span><span class="s1">datetime </span><span class="s0">import </span><span class="s1">datetime</span><span class="s0">, </span><span class="s1">timedelta</span><span class="s0">, </span><span class="s1">timezone</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Any</span><span class="s0">, </span><span class="s1">Dict</span><span class="s0">, </span><span class="s1">List</span><span class="s0">, </span><span class="s1">Optional</span><span class="s0">, </span><span class="s1">Type</span><span class="s0">, </span><span class="s1">Union</span>
+
+<span class="s0">from </span><span class="s1">. </span><span class="s0">import </span><span class="s1">api_jws</span>
+<span class="s0">from </span><span class="s1">.exceptions </span><span class="s0">import </span><span class="s1">(</span>
+    <span class="s1">DecodeError</span><span class="s0">,</span>
+    <span class="s1">ExpiredSignatureError</span><span class="s0">,</span>
+    <span class="s1">ImmatureSignatureError</span><span class="s0">,</span>
+    <span class="s1">InvalidAudienceError</span><span class="s0">,</span>
+    <span class="s1">InvalidIssuedAtError</span><span class="s0">,</span>
+    <span class="s1">InvalidIssuerError</span><span class="s0">,</span>
+    <span class="s1">MissingRequiredClaimError</span><span class="s0">,</span>
+<span class="s1">)</span>
+<span class="s0">from </span><span class="s1">.warnings </span><span class="s0">import </span><span class="s1">RemovedInPyjwt3Warning</span>
+
+
+<span class="s0">class </span><span class="s1">PyJWT:</span>
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">options=</span><span class="s0">None</span><span class="s1">):</span>
+        <span class="s0">if </span><span class="s1">options </span><span class="s0">is None</span><span class="s1">:</span>
+            <span class="s1">options = {}</span>
+        <span class="s1">self.options = {**self._get_default_options()</span><span class="s0">, </span><span class="s1">**options}</span>
+
+    <span class="s1">@staticmethod</span>
+    <span class="s0">def </span><span class="s1">_get_default_options() -&gt; Dict[str</span><span class="s0">, </span><span class="s1">Union[bool</span><span class="s0">, </span><span class="s1">List[str]]]:</span>
+        <span class="s0">return </span><span class="s1">{</span>
+            <span class="s2">&quot;verify_signature&quot;</span><span class="s1">: </span><span class="s0">True,</span>
+            <span class="s2">&quot;verify_exp&quot;</span><span class="s1">: </span><span class="s0">True,</span>
+            <span class="s2">&quot;verify_nbf&quot;</span><span class="s1">: </span><span class="s0">True,</span>
+            <span class="s2">&quot;verify_iat&quot;</span><span class="s1">: </span><span class="s0">True,</span>
+            <span class="s2">&quot;verify_aud&quot;</span><span class="s1">: </span><span class="s0">True,</span>
+            <span class="s2">&quot;verify_iss&quot;</span><span class="s1">: </span><span class="s0">True,</span>
+            <span class="s2">&quot;require&quot;</span><span class="s1">: []</span><span class="s0">,</span>
+        <span class="s1">}</span>
+
+    <span class="s0">def </span><span class="s1">encode(</span>
+        <span class="s1">self</span><span class="s0">,</span>
+        <span class="s1">payload: Dict[str</span><span class="s0">, </span><span class="s1">Any]</span><span class="s0">,</span>
+        <span class="s1">key: str</span><span class="s0">,</span>
+        <span class="s1">algorithm: Optional[str] = </span><span class="s2">&quot;HS256&quot;</span><span class="s0">,</span>
+        <span class="s1">headers: Optional[Dict[str</span><span class="s0">, </span><span class="s1">Any]] = </span><span class="s0">None,</span>
+        <span class="s1">json_encoder: Optional[Type[json.JSONEncoder]] = </span><span class="s0">None,</span>
+    <span class="s1">) -&gt; str:</span>
+        <span class="s3"># Check that we get a mapping</span>
+        <span class="s0">if not </span><span class="s1">isinstance(payload</span><span class="s0">, </span><span class="s1">Mapping):</span>
+            <span class="s0">raise </span><span class="s1">TypeError(</span>
+                <span class="s2">&quot;Expecting a mapping object, as JWT only supports &quot;</span>
+                <span class="s2">&quot;JSON objects as payloads.&quot;</span>
+            <span class="s1">)</span>
+
+        <span class="s3"># Payload</span>
+        <span class="s1">payload = payload.copy()</span>
+        <span class="s0">for </span><span class="s1">time_claim </span><span class="s0">in </span><span class="s1">[</span><span class="s2">&quot;exp&quot;</span><span class="s0">, </span><span class="s2">&quot;iat&quot;</span><span class="s0">, </span><span class="s2">&quot;nbf&quot;</span><span class="s1">]:</span>
+            <span class="s3"># Convert datetime to a intDate value in known time-format claims</span>
+            <span class="s0">if </span><span class="s1">isinstance(payload.get(time_claim)</span><span class="s0">, </span><span class="s1">datetime):</span>
+                <span class="s1">payload[time_claim] = timegm(payload[time_claim].utctimetuple())</span>
+
+        <span class="s1">json_payload = json.dumps(</span>
+            <span class="s1">payload</span><span class="s0">, </span><span class="s1">separators=(</span><span class="s2">&quot;,&quot;</span><span class="s0">, </span><span class="s2">&quot;:&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s1">cls=json_encoder</span>
+        <span class="s1">).encode(</span><span class="s2">&quot;utf-8&quot;</span><span class="s1">)</span>
+
+        <span class="s0">return </span><span class="s1">api_jws.encode(json_payload</span><span class="s0">, </span><span class="s1">key</span><span class="s0">, </span><span class="s1">algorithm</span><span class="s0">, </span><span class="s1">headers</span><span class="s0">, </span><span class="s1">json_encoder)</span>
+
+    <span class="s0">def </span><span class="s1">decode_complete(</span>
+        <span class="s1">self</span><span class="s0">,</span>
+        <span class="s1">jwt: str</span><span class="s0">,</span>
+        <span class="s1">key: str = </span><span class="s2">&quot;&quot;</span><span class="s0">,</span>
+        <span class="s1">algorithms: Optional[List[str]] = </span><span class="s0">None,</span>
+        <span class="s1">options: Optional[Dict[str</span><span class="s0">, </span><span class="s1">Any]] = </span><span class="s0">None,</span>
+        <span class="s3"># deprecated arg, remove in pyjwt3</span>
+        <span class="s1">verify: Optional[bool] = </span><span class="s0">None,</span>
+        <span class="s3"># could be used as passthrough to api_jws, consider removal in pyjwt3</span>
+        <span class="s1">detached_payload: Optional[bytes] = </span><span class="s0">None,</span>
+        <span class="s3"># passthrough arguments to _validate_claims</span>
+        <span class="s3"># consider putting in options</span>
+        <span class="s1">audience: Optional[Union[str</span><span class="s0">, </span><span class="s1">Iterable[str]]] = </span><span class="s0">None,</span>
+        <span class="s1">issuer: Optional[str] = </span><span class="s0">None,</span>
+        <span class="s1">leeway: Union[int</span><span class="s0">, </span><span class="s1">float</span><span class="s0">, </span><span class="s1">timedelta] = </span><span class="s4">0</span><span class="s0">,</span>
+        <span class="s3"># kwargs</span>
+        <span class="s1">**kwargs</span><span class="s0">,</span>
+    <span class="s1">) -&gt; Dict[str</span><span class="s0">, </span><span class="s1">Any]:</span>
+        <span class="s0">if </span><span class="s1">kwargs:</span>
+            <span class="s1">warnings.warn(</span>
+                <span class="s2">&quot;passing additional kwargs to decode_complete() is deprecated &quot;</span>
+                <span class="s2">&quot;and will be removed in pyjwt version 3. &quot;</span>
+                <span class="s2">f&quot;Unsupported kwargs: </span><span class="s0">{</span><span class="s1">tuple(kwargs.keys())</span><span class="s0">}</span><span class="s2">&quot;</span><span class="s0">,</span>
+                <span class="s1">RemovedInPyjwt3Warning</span><span class="s0">,</span>
+            <span class="s1">)</span>
+        <span class="s1">options = dict(options </span><span class="s0">or </span><span class="s1">{})  </span><span class="s3"># shallow-copy or initialize an empty dict</span>
+        <span class="s1">options.setdefault(</span><span class="s2">&quot;verify_signature&quot;</span><span class="s0">, True</span><span class="s1">)</span>
+
+        <span class="s3"># If the user has set the legacy `verify` argument, and it doesn't match</span>
+        <span class="s3"># what the relevant `options` entry for the argument is, inform the user</span>
+        <span class="s3"># that they're likely making a mistake.</span>
+        <span class="s0">if </span><span class="s1">verify </span><span class="s0">is not None and </span><span class="s1">verify != options[</span><span class="s2">&quot;verify_signature&quot;</span><span class="s1">]:</span>
+            <span class="s1">warnings.warn(</span>
+                <span class="s2">&quot;The `verify` argument to `decode` does nothing in PyJWT 2.0 and newer. &quot;</span>
+                <span class="s2">&quot;The equivalent is setting `verify_signature` to False in the `options` dictionary. &quot;</span>
+                <span class="s2">&quot;This invocation has a mismatch between the kwarg and the option entry.&quot;</span><span class="s0">,</span>
+                <span class="s1">category=DeprecationWarning</span><span class="s0">,</span>
+            <span class="s1">)</span>
+
+        <span class="s0">if not </span><span class="s1">options[</span><span class="s2">&quot;verify_signature&quot;</span><span class="s1">]:</span>
+            <span class="s1">options.setdefault(</span><span class="s2">&quot;verify_exp&quot;</span><span class="s0">, False</span><span class="s1">)</span>
+            <span class="s1">options.setdefault(</span><span class="s2">&quot;verify_nbf&quot;</span><span class="s0">, False</span><span class="s1">)</span>
+            <span class="s1">options.setdefault(</span><span class="s2">&quot;verify_iat&quot;</span><span class="s0">, False</span><span class="s1">)</span>
+            <span class="s1">options.setdefault(</span><span class="s2">&quot;verify_aud&quot;</span><span class="s0">, False</span><span class="s1">)</span>
+            <span class="s1">options.setdefault(</span><span class="s2">&quot;verify_iss&quot;</span><span class="s0">, False</span><span class="s1">)</span>
+
+        <span class="s0">if </span><span class="s1">options[</span><span class="s2">&quot;verify_signature&quot;</span><span class="s1">] </span><span class="s0">and not </span><span class="s1">algorithms:</span>
+            <span class="s0">raise </span><span class="s1">DecodeError(</span>
+                <span class="s2">'It is required that you pass in a value for the &quot;algorithms&quot; argument when calling decode().'</span>
+            <span class="s1">)</span>
+
+        <span class="s1">decoded = api_jws.decode_complete(</span>
+            <span class="s1">jwt</span><span class="s0">,</span>
+            <span class="s1">key=key</span><span class="s0">,</span>
+            <span class="s1">algorithms=algorithms</span><span class="s0">,</span>
+            <span class="s1">options=options</span><span class="s0">,</span>
+            <span class="s1">detached_payload=detached_payload</span><span class="s0">,</span>
+        <span class="s1">)</span>
+
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">payload = json.loads(decoded[</span><span class="s2">&quot;payload&quot;</span><span class="s1">])</span>
+        <span class="s0">except </span><span class="s1">ValueError </span><span class="s0">as </span><span class="s1">e:</span>
+            <span class="s0">raise </span><span class="s1">DecodeError(</span><span class="s2">f&quot;Invalid payload string: </span><span class="s0">{</span><span class="s1">e</span><span class="s0">}</span><span class="s2">&quot;</span><span class="s1">)</span>
+        <span class="s0">if not </span><span class="s1">isinstance(payload</span><span class="s0">, </span><span class="s1">dict):</span>
+            <span class="s0">raise </span><span class="s1">DecodeError(</span><span class="s2">&quot;Invalid payload string: must be a json object&quot;</span><span class="s1">)</span>
+
+        <span class="s1">merged_options = {**self.options</span><span class="s0">, </span><span class="s1">**options}</span>
+        <span class="s1">self._validate_claims(</span>
+            <span class="s1">payload</span><span class="s0">, </span><span class="s1">merged_options</span><span class="s0">, </span><span class="s1">audience=audience</span><span class="s0">, </span><span class="s1">issuer=issuer</span><span class="s0">, </span><span class="s1">leeway=leeway</span>
+        <span class="s1">)</span>
+
+        <span class="s1">decoded[</span><span class="s2">&quot;payload&quot;</span><span class="s1">] = payload</span>
+        <span class="s0">return </span><span class="s1">decoded</span>
+
+    <span class="s0">def </span><span class="s1">decode(</span>
+        <span class="s1">self</span><span class="s0">,</span>
+        <span class="s1">jwt: str</span><span class="s0">,</span>
+        <span class="s1">key: str = </span><span class="s2">&quot;&quot;</span><span class="s0">,</span>
+        <span class="s1">algorithms: Optional[List[str]] = </span><span class="s0">None,</span>
+        <span class="s1">options: Optional[Dict[str</span><span class="s0">, </span><span class="s1">Any]] = </span><span class="s0">None,</span>
+        <span class="s3"># deprecated arg, remove in pyjwt3</span>
+        <span class="s1">verify: Optional[bool] = </span><span class="s0">None,</span>
+        <span class="s3"># could be used as passthrough to api_jws, consider removal in pyjwt3</span>
+        <span class="s1">detached_payload: Optional[bytes] = </span><span class="s0">None,</span>
+        <span class="s3"># passthrough arguments to _validate_claims</span>
+        <span class="s3"># consider putting in options</span>
+        <span class="s1">audience: Optional[Union[str</span><span class="s0">, </span><span class="s1">Iterable[str]]] = </span><span class="s0">None,</span>
+        <span class="s1">issuer: Optional[str] = </span><span class="s0">None,</span>
+        <span class="s1">leeway: Union[int</span><span class="s0">, </span><span class="s1">float</span><span class="s0">, </span><span class="s1">timedelta] = </span><span class="s4">0</span><span class="s0">,</span>
+        <span class="s3"># kwargs</span>
+        <span class="s1">**kwargs</span><span class="s0">,</span>
+    <span class="s1">) -&gt; Dict[str</span><span class="s0">, </span><span class="s1">Any]:</span>
+        <span class="s0">if </span><span class="s1">kwargs:</span>
+            <span class="s1">warnings.warn(</span>
+                <span class="s2">&quot;passing additional kwargs to decode() is deprecated &quot;</span>
+                <span class="s2">&quot;and will be removed in pyjwt version 3. &quot;</span>
+                <span class="s2">f&quot;Unsupported kwargs: </span><span class="s0">{</span><span class="s1">tuple(kwargs.keys())</span><span class="s0">}</span><span class="s2">&quot;</span><span class="s0">,</span>
+                <span class="s1">RemovedInPyjwt3Warning</span><span class="s0">,</span>
+            <span class="s1">)</span>
+        <span class="s1">decoded = self.decode_complete(</span>
+            <span class="s1">jwt</span><span class="s0">,</span>
+            <span class="s1">key</span><span class="s0">,</span>
+            <span class="s1">algorithms</span><span class="s0">,</span>
+            <span class="s1">options</span><span class="s0">,</span>
+            <span class="s1">verify=verify</span><span class="s0">,</span>
+            <span class="s1">detached_payload=detached_payload</span><span class="s0">,</span>
+            <span class="s1">audience=audience</span><span class="s0">,</span>
+            <span class="s1">issuer=issuer</span><span class="s0">,</span>
+            <span class="s1">leeway=leeway</span><span class="s0">,</span>
+        <span class="s1">)</span>
+        <span class="s0">return </span><span class="s1">decoded[</span><span class="s2">&quot;payload&quot;</span><span class="s1">]</span>
+
+    <span class="s0">def </span><span class="s1">_validate_claims(self</span><span class="s0">, </span><span class="s1">payload</span><span class="s0">, </span><span class="s1">options</span><span class="s0">, </span><span class="s1">audience=</span><span class="s0">None, </span><span class="s1">issuer=</span><span class="s0">None, </span><span class="s1">leeway=</span><span class="s4">0</span><span class="s1">):</span>
+        <span class="s0">if </span><span class="s1">isinstance(leeway</span><span class="s0">, </span><span class="s1">timedelta):</span>
+            <span class="s1">leeway = leeway.total_seconds()</span>
+
+        <span class="s0">if </span><span class="s1">audience </span><span class="s0">is not None and not </span><span class="s1">isinstance(audience</span><span class="s0">, </span><span class="s1">(str</span><span class="s0">, </span><span class="s1">Iterable)):</span>
+            <span class="s0">raise </span><span class="s1">TypeError(</span><span class="s2">&quot;audience must be a string, iterable or None&quot;</span><span class="s1">)</span>
+
+        <span class="s1">self._validate_required_claims(payload</span><span class="s0">, </span><span class="s1">options)</span>
+
+        <span class="s1">now = timegm(datetime.now(tz=timezone.utc).utctimetuple())</span>
+
+        <span class="s0">if </span><span class="s2">&quot;iat&quot; </span><span class="s0">in </span><span class="s1">payload </span><span class="s0">and </span><span class="s1">options[</span><span class="s2">&quot;verify_iat&quot;</span><span class="s1">]:</span>
+            <span class="s1">self._validate_iat(payload</span><span class="s0">, </span><span class="s1">now</span><span class="s0">, </span><span class="s1">leeway)</span>
+
+        <span class="s0">if </span><span class="s2">&quot;nbf&quot; </span><span class="s0">in </span><span class="s1">payload </span><span class="s0">and </span><span class="s1">options[</span><span class="s2">&quot;verify_nbf&quot;</span><span class="s1">]:</span>
+            <span class="s1">self._validate_nbf(payload</span><span class="s0">, </span><span class="s1">now</span><span class="s0">, </span><span class="s1">leeway)</span>
+
+        <span class="s0">if </span><span class="s2">&quot;exp&quot; </span><span class="s0">in </span><span class="s1">payload </span><span class="s0">and </span><span class="s1">options[</span><span class="s2">&quot;verify_exp&quot;</span><span class="s1">]:</span>
+            <span class="s1">self._validate_exp(payload</span><span class="s0">, </span><span class="s1">now</span><span class="s0">, </span><span class="s1">leeway)</span>
+
+        <span class="s0">if </span><span class="s1">options[</span><span class="s2">&quot;verify_iss&quot;</span><span class="s1">]:</span>
+            <span class="s1">self._validate_iss(payload</span><span class="s0">, </span><span class="s1">issuer)</span>
+
+        <span class="s0">if </span><span class="s1">options[</span><span class="s2">&quot;verify_aud&quot;</span><span class="s1">]:</span>
+            <span class="s1">self._validate_aud(payload</span><span class="s0">, </span><span class="s1">audience)</span>
+
+    <span class="s0">def </span><span class="s1">_validate_required_claims(self</span><span class="s0">, </span><span class="s1">payload</span><span class="s0">, </span><span class="s1">options):</span>
+        <span class="s0">for </span><span class="s1">claim </span><span class="s0">in </span><span class="s1">options[</span><span class="s2">&quot;require&quot;</span><span class="s1">]:</span>
+            <span class="s0">if </span><span class="s1">payload.get(claim) </span><span class="s0">is None</span><span class="s1">:</span>
+                <span class="s0">raise </span><span class="s1">MissingRequiredClaimError(claim)</span>
+
+    <span class="s0">def </span><span class="s1">_validate_iat(self</span><span class="s0">, </span><span class="s1">payload</span><span class="s0">, </span><span class="s1">now</span><span class="s0">, </span><span class="s1">leeway):</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">int(payload[</span><span class="s2">&quot;iat&quot;</span><span class="s1">])</span>
+        <span class="s0">except </span><span class="s1">ValueError:</span>
+            <span class="s0">raise </span><span class="s1">InvalidIssuedAtError(</span><span class="s2">&quot;Issued At claim (iat) must be an integer.&quot;</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">_validate_nbf(self</span><span class="s0">, </span><span class="s1">payload</span><span class="s0">, </span><span class="s1">now</span><span class="s0">, </span><span class="s1">leeway):</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">nbf = int(payload[</span><span class="s2">&quot;nbf&quot;</span><span class="s1">])</span>
+        <span class="s0">except </span><span class="s1">ValueError:</span>
+            <span class="s0">raise </span><span class="s1">DecodeError(</span><span class="s2">&quot;Not Before claim (nbf) must be an integer.&quot;</span><span class="s1">)</span>
+
+        <span class="s0">if </span><span class="s1">nbf &gt; (now + leeway):</span>
+            <span class="s0">raise </span><span class="s1">ImmatureSignatureError(</span><span class="s2">&quot;The token is not yet valid (nbf)&quot;</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">_validate_exp(self</span><span class="s0">, </span><span class="s1">payload</span><span class="s0">, </span><span class="s1">now</span><span class="s0">, </span><span class="s1">leeway):</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">exp = int(payload[</span><span class="s2">&quot;exp&quot;</span><span class="s1">])</span>
+        <span class="s0">except </span><span class="s1">ValueError:</span>
+            <span class="s0">raise </span><span class="s1">DecodeError(</span><span class="s2">&quot;Expiration Time claim (exp) must be an&quot; &quot; integer.&quot;</span><span class="s1">)</span>
+
+        <span class="s0">if </span><span class="s1">exp &lt; (now - leeway):</span>
+            <span class="s0">raise </span><span class="s1">ExpiredSignatureError(</span><span class="s2">&quot;Signature has expired&quot;</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">_validate_aud(self</span><span class="s0">, </span><span class="s1">payload</span><span class="s0">, </span><span class="s1">audience):</span>
+        <span class="s0">if </span><span class="s1">audience </span><span class="s0">is None</span><span class="s1">:</span>
+            <span class="s0">if </span><span class="s2">&quot;aud&quot; </span><span class="s0">not in </span><span class="s1">payload </span><span class="s0">or not </span><span class="s1">payload[</span><span class="s2">&quot;aud&quot;</span><span class="s1">]:</span>
+                <span class="s0">return</span>
+            <span class="s3"># Application did not specify an audience, but</span>
+            <span class="s3"># the token has the 'aud' claim</span>
+            <span class="s0">raise </span><span class="s1">InvalidAudienceError(</span><span class="s2">&quot;Invalid audience&quot;</span><span class="s1">)</span>
+
+        <span class="s0">if </span><span class="s2">&quot;aud&quot; </span><span class="s0">not in </span><span class="s1">payload </span><span class="s0">or not </span><span class="s1">payload[</span><span class="s2">&quot;aud&quot;</span><span class="s1">]:</span>
+            <span class="s3"># Application specified an audience, but it could not be</span>
+            <span class="s3"># verified since the token does not contain a claim.</span>
+            <span class="s0">raise </span><span class="s1">MissingRequiredClaimError(</span><span class="s2">&quot;aud&quot;</span><span class="s1">)</span>
+
+        <span class="s1">audience_claims = payload[</span><span class="s2">&quot;aud&quot;</span><span class="s1">]</span>
+
+        <span class="s0">if </span><span class="s1">isinstance(audience_claims</span><span class="s0">, </span><span class="s1">str):</span>
+            <span class="s1">audience_claims = [audience_claims]</span>
+        <span class="s0">if not </span><span class="s1">isinstance(audience_claims</span><span class="s0">, </span><span class="s1">list):</span>
+            <span class="s0">raise </span><span class="s1">InvalidAudienceError(</span><span class="s2">&quot;Invalid claim format in token&quot;</span><span class="s1">)</span>
+        <span class="s0">if </span><span class="s1">any(</span><span class="s0">not </span><span class="s1">isinstance(c</span><span class="s0">, </span><span class="s1">str) </span><span class="s0">for </span><span class="s1">c </span><span class="s0">in </span><span class="s1">audience_claims):</span>
+            <span class="s0">raise </span><span class="s1">InvalidAudienceError(</span><span class="s2">&quot;Invalid claim format in token&quot;</span><span class="s1">)</span>
+
+        <span class="s0">if </span><span class="s1">isinstance(audience</span><span class="s0">, </span><span class="s1">str):</span>
+            <span class="s1">audience = [audience]</span>
+
+        <span class="s0">if </span><span class="s1">all(aud </span><span class="s0">not in </span><span class="s1">audience_claims </span><span class="s0">for </span><span class="s1">aud </span><span class="s0">in </span><span class="s1">audience):</span>
+            <span class="s0">raise </span><span class="s1">InvalidAudienceError(</span><span class="s2">&quot;Invalid audience&quot;</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">_validate_iss(self</span><span class="s0">, </span><span class="s1">payload</span><span class="s0">, </span><span class="s1">issuer):</span>
+        <span class="s0">if </span><span class="s1">issuer </span><span class="s0">is None</span><span class="s1">:</span>
+            <span class="s0">return</span>
+
+        <span class="s0">if </span><span class="s2">&quot;iss&quot; </span><span class="s0">not in </span><span class="s1">payload:</span>
+            <span class="s0">raise </span><span class="s1">MissingRequiredClaimError(</span><span class="s2">&quot;iss&quot;</span><span class="s1">)</span>
+
+        <span class="s0">if </span><span class="s1">payload[</span><span class="s2">&quot;iss&quot;</span><span class="s1">] != issuer:</span>
+            <span class="s0">raise </span><span class="s1">InvalidIssuerError(</span><span class="s2">&quot;Invalid issuer&quot;</span><span class="s1">)</span>
+
+
+<span class="s1">_jwt_global_obj = PyJWT()</span>
+<span class="s1">encode = _jwt_global_obj.encode</span>
+<span class="s1">decode_complete = _jwt_global_obj.decode_complete</span>
+<span class="s1">decode = _jwt_global_obj.decode</span>
+</pre>
+</body>
+</html>

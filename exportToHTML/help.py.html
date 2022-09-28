@@ -1,0 +1,83 @@
+<html>
+<head>
+<title>help.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #629755; font-style: italic;}
+.s3 { color: #6a8759;}
+.s4 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+help.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">json</span>
+<span class="s0">import </span><span class="s1">platform</span>
+<span class="s0">import </span><span class="s1">sys</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Dict</span>
+
+<span class="s0">from </span><span class="s1">. </span><span class="s0">import </span><span class="s1">__version__ </span><span class="s0">as </span><span class="s1">pyjwt_version</span>
+
+<span class="s0">try</span><span class="s1">:</span>
+    <span class="s0">import </span><span class="s1">cryptography</span>
+<span class="s0">except </span><span class="s1">ModuleNotFoundError:</span>
+    <span class="s1">cryptography = </span><span class="s0">None</span>
+
+
+<span class="s0">def </span><span class="s1">info() -&gt; Dict[str</span><span class="s0">, </span><span class="s1">Dict[str</span><span class="s0">, </span><span class="s1">str]]:</span>
+    <span class="s2">&quot;&quot;&quot; 
+    Generate information for a bug report. 
+    Based on the requests package help utility module. 
+    &quot;&quot;&quot;</span>
+    <span class="s0">try</span><span class="s1">:</span>
+        <span class="s1">platform_info = {</span>
+            <span class="s3">&quot;system&quot;</span><span class="s1">: platform.system()</span><span class="s0">,</span>
+            <span class="s3">&quot;release&quot;</span><span class="s1">: platform.release()</span><span class="s0">,</span>
+        <span class="s1">}</span>
+    <span class="s0">except </span><span class="s1">OSError:</span>
+        <span class="s1">platform_info = {</span><span class="s3">&quot;system&quot;</span><span class="s1">: </span><span class="s3">&quot;Unknown&quot;</span><span class="s0">, </span><span class="s3">&quot;release&quot;</span><span class="s1">: </span><span class="s3">&quot;Unknown&quot;</span><span class="s1">}</span>
+
+    <span class="s1">implementation = platform.python_implementation()</span>
+
+    <span class="s0">if </span><span class="s1">implementation == </span><span class="s3">&quot;CPython&quot;</span><span class="s1">:</span>
+        <span class="s1">implementation_version = platform.python_version()</span>
+    <span class="s0">elif </span><span class="s1">implementation == </span><span class="s3">&quot;PyPy&quot;</span><span class="s1">:</span>
+        <span class="s1">pypy_version_info = getattr(sys</span><span class="s0">, </span><span class="s3">&quot;pypy_version_info&quot;</span><span class="s1">)</span>
+        <span class="s1">implementation_version = (</span>
+            <span class="s3">f&quot;</span><span class="s0">{</span><span class="s1">pypy_version_info.major</span><span class="s0">}</span><span class="s3">.&quot;</span>
+            <span class="s3">f&quot;</span><span class="s0">{</span><span class="s1">pypy_version_info.minor</span><span class="s0">}</span><span class="s3">.&quot;</span>
+            <span class="s3">f&quot;</span><span class="s0">{</span><span class="s1">pypy_version_info.micro</span><span class="s0">}</span><span class="s3">&quot;</span>
+        <span class="s1">)</span>
+        <span class="s0">if </span><span class="s1">pypy_version_info.releaselevel != </span><span class="s3">&quot;final&quot;</span><span class="s1">:</span>
+            <span class="s1">implementation_version = </span><span class="s3">&quot;&quot;</span><span class="s1">.join(</span>
+                <span class="s1">[implementation_version</span><span class="s0">, </span><span class="s1">pypy_version_info.releaselevel]</span>
+            <span class="s1">)</span>
+    <span class="s0">else</span><span class="s1">:</span>
+        <span class="s1">implementation_version = </span><span class="s3">&quot;Unknown&quot;</span>
+
+    <span class="s0">return </span><span class="s1">{</span>
+        <span class="s3">&quot;platform&quot;</span><span class="s1">: platform_info</span><span class="s0">,</span>
+        <span class="s3">&quot;implementation&quot;</span><span class="s1">: {</span>
+            <span class="s3">&quot;name&quot;</span><span class="s1">: implementation</span><span class="s0">,</span>
+            <span class="s3">&quot;version&quot;</span><span class="s1">: implementation_version</span><span class="s0">,</span>
+        <span class="s1">}</span><span class="s0">,</span>
+        <span class="s3">&quot;cryptography&quot;</span><span class="s1">: {</span><span class="s3">&quot;version&quot;</span><span class="s1">: getattr(cryptography</span><span class="s0">, </span><span class="s3">&quot;__version__&quot;</span><span class="s0">, </span><span class="s3">&quot;&quot;</span><span class="s1">)}</span><span class="s0">,</span>
+        <span class="s3">&quot;pyjwt&quot;</span><span class="s1">: {</span><span class="s3">&quot;version&quot;</span><span class="s1">: pyjwt_version}</span><span class="s0">,</span>
+    <span class="s1">}</span>
+
+
+<span class="s0">def </span><span class="s1">main() -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+    <span class="s2">&quot;&quot;&quot;Pretty-print the bug information as JSON.&quot;&quot;&quot;</span>
+    <span class="s1">print(json.dumps(info()</span><span class="s0">, </span><span class="s1">sort_keys=</span><span class="s0">True, </span><span class="s1">indent=</span><span class="s4">2</span><span class="s1">))</span>
+
+
+<span class="s0">if </span><span class="s1">__name__ == </span><span class="s3">&quot;__main__&quot;</span><span class="s1">:</span>
+    <span class="s1">main()</span>
+</pre>
+</body>
+</html>

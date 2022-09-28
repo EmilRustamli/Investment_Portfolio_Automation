@@ -1,0 +1,128 @@
+<html>
+<head>
+<title>jwks_client.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6897bb;}
+.s3 { color: #808080;}
+.s4 { color: #6a8759;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+jwks_client.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">json</span>
+<span class="s0">import </span><span class="s1">urllib.request</span>
+<span class="s0">from </span><span class="s1">functools </span><span class="s0">import </span><span class="s1">lru_cache</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Any</span><span class="s0">, </span><span class="s1">List</span><span class="s0">, </span><span class="s1">Optional</span>
+<span class="s0">from </span><span class="s1">urllib.error </span><span class="s0">import </span><span class="s1">URLError</span>
+
+<span class="s0">from </span><span class="s1">.api_jwk </span><span class="s0">import </span><span class="s1">PyJWK</span><span class="s0">, </span><span class="s1">PyJWKSet</span>
+<span class="s0">from </span><span class="s1">.api_jwt </span><span class="s0">import </span><span class="s1">decode_complete </span><span class="s0">as </span><span class="s1">decode_token</span>
+<span class="s0">from </span><span class="s1">.exceptions </span><span class="s0">import </span><span class="s1">PyJWKClientError</span>
+<span class="s0">from </span><span class="s1">.jwk_set_cache </span><span class="s0">import </span><span class="s1">JWKSetCache</span>
+
+
+<span class="s0">class </span><span class="s1">PyJWKClient:</span>
+    <span class="s0">def </span><span class="s1">__init__(</span>
+        <span class="s1">self</span><span class="s0">,</span>
+        <span class="s1">uri: str</span><span class="s0">,</span>
+        <span class="s1">cache_keys: bool = </span><span class="s0">False,</span>
+        <span class="s1">max_cached_keys: int = </span><span class="s2">16</span><span class="s0">,</span>
+        <span class="s1">cache_jwk_set: bool = </span><span class="s0">True,</span>
+        <span class="s1">lifespan: int = </span><span class="s2">300</span><span class="s0">,</span>
+    <span class="s1">):</span>
+        <span class="s1">self.uri = uri</span>
+        <span class="s1">self.jwk_set_cache: Optional[JWKSetCache] = </span><span class="s0">None</span>
+
+        <span class="s0">if </span><span class="s1">cache_jwk_set:</span>
+            <span class="s3"># Init jwt set cache with default or given lifespan.</span>
+            <span class="s3"># Default lifespan is 300 seconds (5 minutes).</span>
+            <span class="s0">if </span><span class="s1">lifespan &lt;= </span><span class="s2">0</span><span class="s1">:</span>
+                <span class="s0">raise </span><span class="s1">PyJWKClientError(</span>
+                    <span class="s4">f'Lifespan must be greater than 0, the input is &quot;</span><span class="s0">{</span><span class="s1">lifespan</span><span class="s0">}</span><span class="s4">&quot;'</span>
+                <span class="s1">)</span>
+            <span class="s1">self.jwk_set_cache = JWKSetCache(lifespan)</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s1">self.jwk_set_cache = </span><span class="s0">None</span>
+
+        <span class="s0">if </span><span class="s1">cache_keys:</span>
+            <span class="s3"># Cache signing keys</span>
+            <span class="s3"># Ignore mypy (https://github.com/python/mypy/issues/2427)</span>
+            <span class="s1">self.get_signing_key = lru_cache(maxsize=max_cached_keys)(self.get_signing_key)  </span><span class="s3"># type: ignore</span>
+
+    <span class="s0">def </span><span class="s1">fetch_data(self) -&gt; Any:</span>
+        <span class="s1">jwk_set: Any = </span><span class="s0">None</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s0">with </span><span class="s1">urllib.request.urlopen(self.uri) </span><span class="s0">as </span><span class="s1">response:</span>
+                <span class="s1">jwk_set = json.load(response)</span>
+        <span class="s0">except </span><span class="s1">URLError </span><span class="s0">as </span><span class="s1">e:</span>
+            <span class="s0">raise </span><span class="s1">PyJWKClientError(</span><span class="s4">f'Fail to fetch data from the url, err: &quot;</span><span class="s0">{</span><span class="s1">e</span><span class="s0">}</span><span class="s4">&quot;'</span><span class="s1">)</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s0">return </span><span class="s1">jwk_set</span>
+        <span class="s0">finally</span><span class="s1">:</span>
+            <span class="s0">if </span><span class="s1">self.jwk_set_cache </span><span class="s0">is not None</span><span class="s1">:</span>
+                <span class="s1">self.jwk_set_cache.put(jwk_set)</span>
+
+    <span class="s0">def </span><span class="s1">get_jwk_set(self</span><span class="s0">, </span><span class="s1">refresh: bool = </span><span class="s0">False</span><span class="s1">) -&gt; PyJWKSet:</span>
+        <span class="s1">data = </span><span class="s0">None</span>
+        <span class="s0">if </span><span class="s1">self.jwk_set_cache </span><span class="s0">is not None and not </span><span class="s1">refresh:</span>
+            <span class="s1">data = self.jwk_set_cache.get()</span>
+
+        <span class="s0">if </span><span class="s1">data </span><span class="s0">is None</span><span class="s1">:</span>
+            <span class="s1">data = self.fetch_data()</span>
+
+        <span class="s0">return </span><span class="s1">PyJWKSet.from_dict(data)</span>
+
+    <span class="s0">def </span><span class="s1">get_signing_keys(self</span><span class="s0">, </span><span class="s1">refresh: bool = </span><span class="s0">False</span><span class="s1">) -&gt; List[PyJWK]:</span>
+        <span class="s1">jwk_set = self.get_jwk_set(refresh)</span>
+        <span class="s1">signing_keys = [</span>
+            <span class="s1">jwk_set_key</span>
+            <span class="s0">for </span><span class="s1">jwk_set_key </span><span class="s0">in </span><span class="s1">jwk_set.keys</span>
+            <span class="s0">if </span><span class="s1">jwk_set_key.public_key_use </span><span class="s0">in </span><span class="s1">[</span><span class="s4">&quot;sig&quot;</span><span class="s0">, None</span><span class="s1">] </span><span class="s0">and </span><span class="s1">jwk_set_key.key_id</span>
+        <span class="s1">]</span>
+
+        <span class="s0">if not </span><span class="s1">signing_keys:</span>
+            <span class="s0">raise </span><span class="s1">PyJWKClientError(</span><span class="s4">&quot;The JWKS endpoint did not contain any signing keys&quot;</span><span class="s1">)</span>
+
+        <span class="s0">return </span><span class="s1">signing_keys</span>
+
+    <span class="s0">def </span><span class="s1">get_signing_key(self</span><span class="s0">, </span><span class="s1">kid: str) -&gt; PyJWK:</span>
+        <span class="s1">signing_keys = self.get_signing_keys()</span>
+        <span class="s1">signing_key = self.match_kid(signing_keys</span><span class="s0">, </span><span class="s1">kid)</span>
+
+        <span class="s0">if not </span><span class="s1">signing_key:</span>
+            <span class="s3"># If no matching signing key from the jwk set, refresh the jwk set and try again.</span>
+            <span class="s1">signing_keys = self.get_signing_keys(refresh=</span><span class="s0">True</span><span class="s1">)</span>
+            <span class="s1">signing_key = self.match_kid(signing_keys</span><span class="s0">, </span><span class="s1">kid)</span>
+
+            <span class="s0">if not </span><span class="s1">signing_key:</span>
+                <span class="s0">raise </span><span class="s1">PyJWKClientError(</span>
+                    <span class="s4">f'Unable to find a signing key that matches: &quot;</span><span class="s0">{</span><span class="s1">kid</span><span class="s0">}</span><span class="s4">&quot;'</span>
+                <span class="s1">)</span>
+
+        <span class="s0">return </span><span class="s1">signing_key</span>
+
+    <span class="s0">def </span><span class="s1">get_signing_key_from_jwt(self</span><span class="s0">, </span><span class="s1">token: str) -&gt; PyJWK:</span>
+        <span class="s1">unverified = decode_token(token</span><span class="s0">, </span><span class="s1">options={</span><span class="s4">&quot;verify_signature&quot;</span><span class="s1">: </span><span class="s0">False</span><span class="s1">})</span>
+        <span class="s1">header = unverified[</span><span class="s4">&quot;header&quot;</span><span class="s1">]</span>
+        <span class="s0">return </span><span class="s1">self.get_signing_key(header.get(</span><span class="s4">&quot;kid&quot;</span><span class="s1">))</span>
+
+    <span class="s1">@staticmethod</span>
+    <span class="s0">def </span><span class="s1">match_kid(signing_keys: List[PyJWK]</span><span class="s0">, </span><span class="s1">kid: str) -&gt; Optional[PyJWK]:</span>
+        <span class="s1">signing_key = </span><span class="s0">None</span>
+
+        <span class="s0">for </span><span class="s1">key </span><span class="s0">in </span><span class="s1">signing_keys:</span>
+            <span class="s0">if </span><span class="s1">key.key_id == kid:</span>
+                <span class="s1">signing_key = key</span>
+                <span class="s0">break</span>
+
+        <span class="s0">return </span><span class="s1">signing_key</span>
+</pre>
+</body>
+</html>

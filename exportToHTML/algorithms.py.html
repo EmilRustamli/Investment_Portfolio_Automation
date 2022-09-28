@@ -1,0 +1,735 @@
+<html>
+<head>
+<title>algorithms.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #629755; font-style: italic;}
+.s4 { color: #808080;}
+.s5 { color: #a5c261;}
+.s6 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+algorithms.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">hashlib</span>
+<span class="s0">import </span><span class="s1">hmac</span>
+<span class="s0">import </span><span class="s1">json</span>
+
+<span class="s0">from </span><span class="s1">.exceptions </span><span class="s0">import </span><span class="s1">InvalidKeyError</span>
+<span class="s0">from </span><span class="s1">.utils </span><span class="s0">import </span><span class="s1">(</span>
+    <span class="s1">base64url_decode</span><span class="s0">,</span>
+    <span class="s1">base64url_encode</span><span class="s0">,</span>
+    <span class="s1">der_to_raw_signature</span><span class="s0">,</span>
+    <span class="s1">force_bytes</span><span class="s0">,</span>
+    <span class="s1">from_base64url_uint</span><span class="s0">,</span>
+    <span class="s1">is_pem_format</span><span class="s0">,</span>
+    <span class="s1">is_ssh_key</span><span class="s0">,</span>
+    <span class="s1">raw_to_der_signature</span><span class="s0">,</span>
+    <span class="s1">to_base64url_uint</span><span class="s0">,</span>
+<span class="s1">)</span>
+
+<span class="s0">try</span><span class="s1">:</span>
+    <span class="s0">import </span><span class="s1">cryptography.exceptions</span>
+    <span class="s0">from </span><span class="s1">cryptography.exceptions </span><span class="s0">import </span><span class="s1">InvalidSignature</span>
+    <span class="s0">from </span><span class="s1">cryptography.hazmat.primitives </span><span class="s0">import </span><span class="s1">hashes</span>
+    <span class="s0">from </span><span class="s1">cryptography.hazmat.primitives.asymmetric </span><span class="s0">import </span><span class="s1">ec</span><span class="s0">, </span><span class="s1">padding</span>
+    <span class="s0">from </span><span class="s1">cryptography.hazmat.primitives.asymmetric.ec </span><span class="s0">import </span><span class="s1">(</span>
+        <span class="s1">EllipticCurvePrivateKey</span><span class="s0">,</span>
+        <span class="s1">EllipticCurvePublicKey</span><span class="s0">,</span>
+    <span class="s1">)</span>
+    <span class="s0">from </span><span class="s1">cryptography.hazmat.primitives.asymmetric.ed448 </span><span class="s0">import </span><span class="s1">(</span>
+        <span class="s1">Ed448PrivateKey</span><span class="s0">,</span>
+        <span class="s1">Ed448PublicKey</span><span class="s0">,</span>
+    <span class="s1">)</span>
+    <span class="s0">from </span><span class="s1">cryptography.hazmat.primitives.asymmetric.ed25519 </span><span class="s0">import </span><span class="s1">(</span>
+        <span class="s1">Ed25519PrivateKey</span><span class="s0">,</span>
+        <span class="s1">Ed25519PublicKey</span><span class="s0">,</span>
+    <span class="s1">)</span>
+    <span class="s0">from </span><span class="s1">cryptography.hazmat.primitives.asymmetric.rsa </span><span class="s0">import </span><span class="s1">(</span>
+        <span class="s1">RSAPrivateKey</span><span class="s0">,</span>
+        <span class="s1">RSAPrivateNumbers</span><span class="s0">,</span>
+        <span class="s1">RSAPublicKey</span><span class="s0">,</span>
+        <span class="s1">RSAPublicNumbers</span><span class="s0">,</span>
+        <span class="s1">rsa_crt_dmp1</span><span class="s0">,</span>
+        <span class="s1">rsa_crt_dmq1</span><span class="s0">,</span>
+        <span class="s1">rsa_crt_iqmp</span><span class="s0">,</span>
+        <span class="s1">rsa_recover_prime_factors</span><span class="s0">,</span>
+    <span class="s1">)</span>
+    <span class="s0">from </span><span class="s1">cryptography.hazmat.primitives.serialization </span><span class="s0">import </span><span class="s1">(</span>
+        <span class="s1">Encoding</span><span class="s0">,</span>
+        <span class="s1">NoEncryption</span><span class="s0">,</span>
+        <span class="s1">PrivateFormat</span><span class="s0">,</span>
+        <span class="s1">PublicFormat</span><span class="s0">,</span>
+        <span class="s1">load_pem_private_key</span><span class="s0">,</span>
+        <span class="s1">load_pem_public_key</span><span class="s0">,</span>
+        <span class="s1">load_ssh_public_key</span><span class="s0">,</span>
+    <span class="s1">)</span>
+
+    <span class="s1">has_crypto = </span><span class="s0">True</span>
+<span class="s0">except </span><span class="s1">ModuleNotFoundError:</span>
+    <span class="s1">has_crypto = </span><span class="s0">False</span>
+
+<span class="s1">requires_cryptography = {</span>
+    <span class="s2">&quot;RS256&quot;</span><span class="s0">,</span>
+    <span class="s2">&quot;RS384&quot;</span><span class="s0">,</span>
+    <span class="s2">&quot;RS512&quot;</span><span class="s0">,</span>
+    <span class="s2">&quot;ES256&quot;</span><span class="s0">,</span>
+    <span class="s2">&quot;ES256K&quot;</span><span class="s0">,</span>
+    <span class="s2">&quot;ES384&quot;</span><span class="s0">,</span>
+    <span class="s2">&quot;ES521&quot;</span><span class="s0">,</span>
+    <span class="s2">&quot;ES512&quot;</span><span class="s0">,</span>
+    <span class="s2">&quot;PS256&quot;</span><span class="s0">,</span>
+    <span class="s2">&quot;PS384&quot;</span><span class="s0">,</span>
+    <span class="s2">&quot;PS512&quot;</span><span class="s0">,</span>
+    <span class="s2">&quot;EdDSA&quot;</span><span class="s0">,</span>
+<span class="s1">}</span>
+
+
+<span class="s0">def </span><span class="s1">get_default_algorithms():</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Returns the algorithms that are implemented by the library. 
+    &quot;&quot;&quot;</span>
+    <span class="s1">default_algorithms = {</span>
+        <span class="s2">&quot;none&quot;</span><span class="s1">: NoneAlgorithm()</span><span class="s0">,</span>
+        <span class="s2">&quot;HS256&quot;</span><span class="s1">: HMACAlgorithm(HMACAlgorithm.SHA256)</span><span class="s0">,</span>
+        <span class="s2">&quot;HS384&quot;</span><span class="s1">: HMACAlgorithm(HMACAlgorithm.SHA384)</span><span class="s0">,</span>
+        <span class="s2">&quot;HS512&quot;</span><span class="s1">: HMACAlgorithm(HMACAlgorithm.SHA512)</span><span class="s0">,</span>
+    <span class="s1">}</span>
+
+    <span class="s0">if </span><span class="s1">has_crypto:</span>
+        <span class="s1">default_algorithms.update(</span>
+            <span class="s1">{</span>
+                <span class="s2">&quot;RS256&quot;</span><span class="s1">: RSAAlgorithm(RSAAlgorithm.SHA256)</span><span class="s0">,</span>
+                <span class="s2">&quot;RS384&quot;</span><span class="s1">: RSAAlgorithm(RSAAlgorithm.SHA384)</span><span class="s0">,</span>
+                <span class="s2">&quot;RS512&quot;</span><span class="s1">: RSAAlgorithm(RSAAlgorithm.SHA512)</span><span class="s0">,</span>
+                <span class="s2">&quot;ES256&quot;</span><span class="s1">: ECAlgorithm(ECAlgorithm.SHA256)</span><span class="s0">,</span>
+                <span class="s2">&quot;ES256K&quot;</span><span class="s1">: ECAlgorithm(ECAlgorithm.SHA256)</span><span class="s0">,</span>
+                <span class="s2">&quot;ES384&quot;</span><span class="s1">: ECAlgorithm(ECAlgorithm.SHA384)</span><span class="s0">,</span>
+                <span class="s2">&quot;ES521&quot;</span><span class="s1">: ECAlgorithm(ECAlgorithm.SHA512)</span><span class="s0">,</span>
+                <span class="s2">&quot;ES512&quot;</span><span class="s1">: ECAlgorithm(</span>
+                    <span class="s1">ECAlgorithm.SHA512</span>
+                <span class="s1">)</span><span class="s0">,  </span><span class="s4"># Backward compat for #219 fix</span>
+                <span class="s2">&quot;PS256&quot;</span><span class="s1">: RSAPSSAlgorithm(RSAPSSAlgorithm.SHA256)</span><span class="s0">,</span>
+                <span class="s2">&quot;PS384&quot;</span><span class="s1">: RSAPSSAlgorithm(RSAPSSAlgorithm.SHA384)</span><span class="s0">,</span>
+                <span class="s2">&quot;PS512&quot;</span><span class="s1">: RSAPSSAlgorithm(RSAPSSAlgorithm.SHA512)</span><span class="s0">,</span>
+                <span class="s2">&quot;EdDSA&quot;</span><span class="s1">: OKPAlgorithm()</span><span class="s0">,</span>
+            <span class="s1">}</span>
+        <span class="s1">)</span>
+
+    <span class="s0">return </span><span class="s1">default_algorithms</span>
+
+
+<span class="s0">class </span><span class="s1">Algorithm:</span>
+    <span class="s3">&quot;&quot;&quot; 
+    The interface for an algorithm used to sign and verify tokens. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">prepare_key(self</span><span class="s0">, </span><span class="s1">key):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Performs necessary validation and conversions on the key and returns 
+        the key value in the proper format for sign() and verify(). 
+        &quot;&quot;&quot;</span>
+        <span class="s0">raise </span><span class="s1">NotImplementedError</span>
+
+    <span class="s0">def </span><span class="s1">sign(self</span><span class="s0">, </span><span class="s1">msg</span><span class="s0">, </span><span class="s1">key):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Returns a digital signature for the specified message 
+        using the specified key value. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">raise </span><span class="s1">NotImplementedError</span>
+
+    <span class="s0">def </span><span class="s1">verify(self</span><span class="s0">, </span><span class="s1">msg</span><span class="s0">, </span><span class="s1">key</span><span class="s0">, </span><span class="s1">sig):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Verifies that the specified digital signature is valid 
+        for the specified message and key values. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">raise </span><span class="s1">NotImplementedError</span>
+
+    <span class="s1">@staticmethod</span>
+    <span class="s0">def </span><span class="s1">to_jwk(key_obj):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Serializes a given RSA key into a JWK 
+        &quot;&quot;&quot;</span>
+        <span class="s0">raise </span><span class="s1">NotImplementedError</span>
+
+    <span class="s1">@staticmethod</span>
+    <span class="s0">def </span><span class="s1">from_jwk(jwk):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Deserializes a given RSA key from JWK back into a PublicKey or PrivateKey object 
+        &quot;&quot;&quot;</span>
+        <span class="s0">raise </span><span class="s1">NotImplementedError</span>
+
+
+<span class="s0">class </span><span class="s1">NoneAlgorithm(Algorithm):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Placeholder for use when no signing or verification 
+    operations are required. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">prepare_key(self</span><span class="s0">, </span><span class="s1">key):</span>
+        <span class="s0">if </span><span class="s1">key == </span><span class="s2">&quot;&quot;</span><span class="s1">:</span>
+            <span class="s1">key = </span><span class="s0">None</span>
+
+        <span class="s0">if </span><span class="s1">key </span><span class="s0">is not None</span><span class="s1">:</span>
+            <span class="s0">raise </span><span class="s1">InvalidKeyError(</span><span class="s2">'When alg = &quot;none&quot;, key value must be None.'</span><span class="s1">)</span>
+
+        <span class="s0">return </span><span class="s1">key</span>
+
+    <span class="s0">def </span><span class="s1">sign(self</span><span class="s0">, </span><span class="s1">msg</span><span class="s0">, </span><span class="s1">key):</span>
+        <span class="s0">return </span><span class="s5">b&quot;&quot;</span>
+
+    <span class="s0">def </span><span class="s1">verify(self</span><span class="s0">, </span><span class="s1">msg</span><span class="s0">, </span><span class="s1">key</span><span class="s0">, </span><span class="s1">sig):</span>
+        <span class="s0">return False</span>
+
+
+<span class="s0">class </span><span class="s1">HMACAlgorithm(Algorithm):</span>
+    <span class="s3">&quot;&quot;&quot; 
+    Performs signing and verification operations using HMAC 
+    and the specified hash function. 
+    &quot;&quot;&quot;</span>
+
+    <span class="s1">SHA256 = hashlib.sha256</span>
+    <span class="s1">SHA384 = hashlib.sha384</span>
+    <span class="s1">SHA512 = hashlib.sha512</span>
+
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">hash_alg):</span>
+        <span class="s1">self.hash_alg = hash_alg</span>
+
+    <span class="s0">def </span><span class="s1">prepare_key(self</span><span class="s0">, </span><span class="s1">key):</span>
+        <span class="s1">key = force_bytes(key)</span>
+
+        <span class="s0">if </span><span class="s1">is_pem_format(key) </span><span class="s0">or </span><span class="s1">is_ssh_key(key):</span>
+            <span class="s0">raise </span><span class="s1">InvalidKeyError(</span>
+                <span class="s2">&quot;The specified key is an asymmetric key or x509 certificate and&quot;</span>
+                <span class="s2">&quot; should not be used as an HMAC secret.&quot;</span>
+            <span class="s1">)</span>
+
+        <span class="s0">return </span><span class="s1">key</span>
+
+    <span class="s1">@staticmethod</span>
+    <span class="s0">def </span><span class="s1">to_jwk(key_obj):</span>
+        <span class="s0">return </span><span class="s1">json.dumps(</span>
+            <span class="s1">{</span>
+                <span class="s2">&quot;k&quot;</span><span class="s1">: base64url_encode(force_bytes(key_obj)).decode()</span><span class="s0">,</span>
+                <span class="s2">&quot;kty&quot;</span><span class="s1">: </span><span class="s2">&quot;oct&quot;</span><span class="s0">,</span>
+            <span class="s1">}</span>
+        <span class="s1">)</span>
+
+    <span class="s1">@staticmethod</span>
+    <span class="s0">def </span><span class="s1">from_jwk(jwk):</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s0">if </span><span class="s1">isinstance(jwk</span><span class="s0">, </span><span class="s1">str):</span>
+                <span class="s1">obj = json.loads(jwk)</span>
+            <span class="s0">elif </span><span class="s1">isinstance(jwk</span><span class="s0">, </span><span class="s1">dict):</span>
+                <span class="s1">obj = jwk</span>
+            <span class="s0">else</span><span class="s1">:</span>
+                <span class="s0">raise </span><span class="s1">ValueError</span>
+        <span class="s0">except </span><span class="s1">ValueError:</span>
+            <span class="s0">raise </span><span class="s1">InvalidKeyError(</span><span class="s2">&quot;Key is not valid JSON&quot;</span><span class="s1">)</span>
+
+        <span class="s0">if </span><span class="s1">obj.get(</span><span class="s2">&quot;kty&quot;</span><span class="s1">) != </span><span class="s2">&quot;oct&quot;</span><span class="s1">:</span>
+            <span class="s0">raise </span><span class="s1">InvalidKeyError(</span><span class="s2">&quot;Not an HMAC key&quot;</span><span class="s1">)</span>
+
+        <span class="s0">return </span><span class="s1">base64url_decode(obj[</span><span class="s2">&quot;k&quot;</span><span class="s1">])</span>
+
+    <span class="s0">def </span><span class="s1">sign(self</span><span class="s0">, </span><span class="s1">msg</span><span class="s0">, </span><span class="s1">key):</span>
+        <span class="s0">return </span><span class="s1">hmac.new(key</span><span class="s0">, </span><span class="s1">msg</span><span class="s0">, </span><span class="s1">self.hash_alg).digest()</span>
+
+    <span class="s0">def </span><span class="s1">verify(self</span><span class="s0">, </span><span class="s1">msg</span><span class="s0">, </span><span class="s1">key</span><span class="s0">, </span><span class="s1">sig):</span>
+        <span class="s0">return </span><span class="s1">hmac.compare_digest(sig</span><span class="s0">, </span><span class="s1">self.sign(msg</span><span class="s0">, </span><span class="s1">key))</span>
+
+
+<span class="s0">if </span><span class="s1">has_crypto:</span>
+
+    <span class="s0">class </span><span class="s1">RSAAlgorithm(Algorithm):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Performs signing and verification operations using 
+        RSASSA-PKCS-v1_5 and the specified hash function. 
+        &quot;&quot;&quot;</span>
+
+        <span class="s1">SHA256 = hashes.SHA256</span>
+        <span class="s1">SHA384 = hashes.SHA384</span>
+        <span class="s1">SHA512 = hashes.SHA512</span>
+
+        <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">hash_alg):</span>
+            <span class="s1">self.hash_alg = hash_alg</span>
+
+        <span class="s0">def </span><span class="s1">prepare_key(self</span><span class="s0">, </span><span class="s1">key):</span>
+            <span class="s0">if </span><span class="s1">isinstance(key</span><span class="s0">, </span><span class="s1">(RSAPrivateKey</span><span class="s0">, </span><span class="s1">RSAPublicKey)):</span>
+                <span class="s0">return </span><span class="s1">key</span>
+
+            <span class="s0">if not </span><span class="s1">isinstance(key</span><span class="s0">, </span><span class="s1">(bytes</span><span class="s0">, </span><span class="s1">str)):</span>
+                <span class="s0">raise </span><span class="s1">TypeError(</span><span class="s2">&quot;Expecting a PEM-formatted key.&quot;</span><span class="s1">)</span>
+
+            <span class="s1">key = force_bytes(key)</span>
+
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s0">if </span><span class="s1">key.startswith(</span><span class="s5">b&quot;ssh-rsa&quot;</span><span class="s1">):</span>
+                    <span class="s1">key = load_ssh_public_key(key)</span>
+                <span class="s0">else</span><span class="s1">:</span>
+                    <span class="s1">key = load_pem_private_key(key</span><span class="s0">, </span><span class="s1">password=</span><span class="s0">None</span><span class="s1">)</span>
+            <span class="s0">except </span><span class="s1">ValueError:</span>
+                <span class="s1">key = load_pem_public_key(key)</span>
+            <span class="s0">return </span><span class="s1">key</span>
+
+        <span class="s1">@staticmethod</span>
+        <span class="s0">def </span><span class="s1">to_jwk(key_obj):</span>
+            <span class="s1">obj = </span><span class="s0">None</span>
+
+            <span class="s0">if </span><span class="s1">getattr(key_obj</span><span class="s0">, </span><span class="s2">&quot;private_numbers&quot;</span><span class="s0">, None</span><span class="s1">):</span>
+                <span class="s4"># Private key</span>
+                <span class="s1">numbers = key_obj.private_numbers()</span>
+
+                <span class="s1">obj = {</span>
+                    <span class="s2">&quot;kty&quot;</span><span class="s1">: </span><span class="s2">&quot;RSA&quot;</span><span class="s0">,</span>
+                    <span class="s2">&quot;key_ops&quot;</span><span class="s1">: [</span><span class="s2">&quot;sign&quot;</span><span class="s1">]</span><span class="s0">,</span>
+                    <span class="s2">&quot;n&quot;</span><span class="s1">: to_base64url_uint(numbers.public_numbers.n).decode()</span><span class="s0">,</span>
+                    <span class="s2">&quot;e&quot;</span><span class="s1">: to_base64url_uint(numbers.public_numbers.e).decode()</span><span class="s0">,</span>
+                    <span class="s2">&quot;d&quot;</span><span class="s1">: to_base64url_uint(numbers.d).decode()</span><span class="s0">,</span>
+                    <span class="s2">&quot;p&quot;</span><span class="s1">: to_base64url_uint(numbers.p).decode()</span><span class="s0">,</span>
+                    <span class="s2">&quot;q&quot;</span><span class="s1">: to_base64url_uint(numbers.q).decode()</span><span class="s0">,</span>
+                    <span class="s2">&quot;dp&quot;</span><span class="s1">: to_base64url_uint(numbers.dmp1).decode()</span><span class="s0">,</span>
+                    <span class="s2">&quot;dq&quot;</span><span class="s1">: to_base64url_uint(numbers.dmq1).decode()</span><span class="s0">,</span>
+                    <span class="s2">&quot;qi&quot;</span><span class="s1">: to_base64url_uint(numbers.iqmp).decode()</span><span class="s0">,</span>
+                <span class="s1">}</span>
+
+            <span class="s0">elif </span><span class="s1">getattr(key_obj</span><span class="s0">, </span><span class="s2">&quot;verify&quot;</span><span class="s0">, None</span><span class="s1">):</span>
+                <span class="s4"># Public key</span>
+                <span class="s1">numbers = key_obj.public_numbers()</span>
+
+                <span class="s1">obj = {</span>
+                    <span class="s2">&quot;kty&quot;</span><span class="s1">: </span><span class="s2">&quot;RSA&quot;</span><span class="s0">,</span>
+                    <span class="s2">&quot;key_ops&quot;</span><span class="s1">: [</span><span class="s2">&quot;verify&quot;</span><span class="s1">]</span><span class="s0">,</span>
+                    <span class="s2">&quot;n&quot;</span><span class="s1">: to_base64url_uint(numbers.n).decode()</span><span class="s0">,</span>
+                    <span class="s2">&quot;e&quot;</span><span class="s1">: to_base64url_uint(numbers.e).decode()</span><span class="s0">,</span>
+                <span class="s1">}</span>
+            <span class="s0">else</span><span class="s1">:</span>
+                <span class="s0">raise </span><span class="s1">InvalidKeyError(</span><span class="s2">&quot;Not a public or private key&quot;</span><span class="s1">)</span>
+
+            <span class="s0">return </span><span class="s1">json.dumps(obj)</span>
+
+        <span class="s1">@staticmethod</span>
+        <span class="s0">def </span><span class="s1">from_jwk(jwk):</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s0">if </span><span class="s1">isinstance(jwk</span><span class="s0">, </span><span class="s1">str):</span>
+                    <span class="s1">obj = json.loads(jwk)</span>
+                <span class="s0">elif </span><span class="s1">isinstance(jwk</span><span class="s0">, </span><span class="s1">dict):</span>
+                    <span class="s1">obj = jwk</span>
+                <span class="s0">else</span><span class="s1">:</span>
+                    <span class="s0">raise </span><span class="s1">ValueError</span>
+            <span class="s0">except </span><span class="s1">ValueError:</span>
+                <span class="s0">raise </span><span class="s1">InvalidKeyError(</span><span class="s2">&quot;Key is not valid JSON&quot;</span><span class="s1">)</span>
+
+            <span class="s0">if </span><span class="s1">obj.get(</span><span class="s2">&quot;kty&quot;</span><span class="s1">) != </span><span class="s2">&quot;RSA&quot;</span><span class="s1">:</span>
+                <span class="s0">raise </span><span class="s1">InvalidKeyError(</span><span class="s2">&quot;Not an RSA key&quot;</span><span class="s1">)</span>
+
+            <span class="s0">if </span><span class="s2">&quot;d&quot; </span><span class="s0">in </span><span class="s1">obj </span><span class="s0">and </span><span class="s2">&quot;e&quot; </span><span class="s0">in </span><span class="s1">obj </span><span class="s0">and </span><span class="s2">&quot;n&quot; </span><span class="s0">in </span><span class="s1">obj:</span>
+                <span class="s4"># Private key</span>
+                <span class="s0">if </span><span class="s2">&quot;oth&quot; </span><span class="s0">in </span><span class="s1">obj:</span>
+                    <span class="s0">raise </span><span class="s1">InvalidKeyError(</span>
+                        <span class="s2">&quot;Unsupported RSA private key: &gt; 2 primes not supported&quot;</span>
+                    <span class="s1">)</span>
+
+                <span class="s1">other_props = [</span><span class="s2">&quot;p&quot;</span><span class="s0">, </span><span class="s2">&quot;q&quot;</span><span class="s0">, </span><span class="s2">&quot;dp&quot;</span><span class="s0">, </span><span class="s2">&quot;dq&quot;</span><span class="s0">, </span><span class="s2">&quot;qi&quot;</span><span class="s1">]</span>
+                <span class="s1">props_found = [prop </span><span class="s0">in </span><span class="s1">obj </span><span class="s0">for </span><span class="s1">prop </span><span class="s0">in </span><span class="s1">other_props]</span>
+                <span class="s1">any_props_found = any(props_found)</span>
+
+                <span class="s0">if </span><span class="s1">any_props_found </span><span class="s0">and not </span><span class="s1">all(props_found):</span>
+                    <span class="s0">raise </span><span class="s1">InvalidKeyError(</span>
+                        <span class="s2">&quot;RSA key must include all parameters if any are present besides d&quot;</span>
+                    <span class="s1">)</span>
+
+                <span class="s1">public_numbers = RSAPublicNumbers(</span>
+                    <span class="s1">from_base64url_uint(obj[</span><span class="s2">&quot;e&quot;</span><span class="s1">])</span><span class="s0">,</span>
+                    <span class="s1">from_base64url_uint(obj[</span><span class="s2">&quot;n&quot;</span><span class="s1">])</span><span class="s0">,</span>
+                <span class="s1">)</span>
+
+                <span class="s0">if </span><span class="s1">any_props_found:</span>
+                    <span class="s1">numbers = RSAPrivateNumbers(</span>
+                        <span class="s1">d=from_base64url_uint(obj[</span><span class="s2">&quot;d&quot;</span><span class="s1">])</span><span class="s0">,</span>
+                        <span class="s1">p=from_base64url_uint(obj[</span><span class="s2">&quot;p&quot;</span><span class="s1">])</span><span class="s0">,</span>
+                        <span class="s1">q=from_base64url_uint(obj[</span><span class="s2">&quot;q&quot;</span><span class="s1">])</span><span class="s0">,</span>
+                        <span class="s1">dmp1=from_base64url_uint(obj[</span><span class="s2">&quot;dp&quot;</span><span class="s1">])</span><span class="s0">,</span>
+                        <span class="s1">dmq1=from_base64url_uint(obj[</span><span class="s2">&quot;dq&quot;</span><span class="s1">])</span><span class="s0">,</span>
+                        <span class="s1">iqmp=from_base64url_uint(obj[</span><span class="s2">&quot;qi&quot;</span><span class="s1">])</span><span class="s0">,</span>
+                        <span class="s1">public_numbers=public_numbers</span><span class="s0">,</span>
+                    <span class="s1">)</span>
+                <span class="s0">else</span><span class="s1">:</span>
+                    <span class="s1">d = from_base64url_uint(obj[</span><span class="s2">&quot;d&quot;</span><span class="s1">])</span>
+                    <span class="s1">p</span><span class="s0">, </span><span class="s1">q = rsa_recover_prime_factors(</span>
+                        <span class="s1">public_numbers.n</span><span class="s0">, </span><span class="s1">d</span><span class="s0">, </span><span class="s1">public_numbers.e</span>
+                    <span class="s1">)</span>
+
+                    <span class="s1">numbers = RSAPrivateNumbers(</span>
+                        <span class="s1">d=d</span><span class="s0">,</span>
+                        <span class="s1">p=p</span><span class="s0">,</span>
+                        <span class="s1">q=q</span><span class="s0">,</span>
+                        <span class="s1">dmp1=rsa_crt_dmp1(d</span><span class="s0">, </span><span class="s1">p)</span><span class="s0">,</span>
+                        <span class="s1">dmq1=rsa_crt_dmq1(d</span><span class="s0">, </span><span class="s1">q)</span><span class="s0">,</span>
+                        <span class="s1">iqmp=rsa_crt_iqmp(p</span><span class="s0">, </span><span class="s1">q)</span><span class="s0">,</span>
+                        <span class="s1">public_numbers=public_numbers</span><span class="s0">,</span>
+                    <span class="s1">)</span>
+
+                <span class="s0">return </span><span class="s1">numbers.private_key()</span>
+            <span class="s0">elif </span><span class="s2">&quot;n&quot; </span><span class="s0">in </span><span class="s1">obj </span><span class="s0">and </span><span class="s2">&quot;e&quot; </span><span class="s0">in </span><span class="s1">obj:</span>
+                <span class="s4"># Public key</span>
+                <span class="s1">numbers = RSAPublicNumbers(</span>
+                    <span class="s1">from_base64url_uint(obj[</span><span class="s2">&quot;e&quot;</span><span class="s1">])</span><span class="s0">,</span>
+                    <span class="s1">from_base64url_uint(obj[</span><span class="s2">&quot;n&quot;</span><span class="s1">])</span><span class="s0">,</span>
+                <span class="s1">)</span>
+
+                <span class="s0">return </span><span class="s1">numbers.public_key()</span>
+            <span class="s0">else</span><span class="s1">:</span>
+                <span class="s0">raise </span><span class="s1">InvalidKeyError(</span><span class="s2">&quot;Not a public or private key&quot;</span><span class="s1">)</span>
+
+        <span class="s0">def </span><span class="s1">sign(self</span><span class="s0">, </span><span class="s1">msg</span><span class="s0">, </span><span class="s1">key):</span>
+            <span class="s0">return </span><span class="s1">key.sign(msg</span><span class="s0">, </span><span class="s1">padding.PKCS1v15()</span><span class="s0">, </span><span class="s1">self.hash_alg())</span>
+
+        <span class="s0">def </span><span class="s1">verify(self</span><span class="s0">, </span><span class="s1">msg</span><span class="s0">, </span><span class="s1">key</span><span class="s0">, </span><span class="s1">sig):</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s1">key.verify(sig</span><span class="s0">, </span><span class="s1">msg</span><span class="s0">, </span><span class="s1">padding.PKCS1v15()</span><span class="s0">, </span><span class="s1">self.hash_alg())</span>
+                <span class="s0">return True</span>
+            <span class="s0">except </span><span class="s1">InvalidSignature:</span>
+                <span class="s0">return False</span>
+
+    <span class="s0">class </span><span class="s1">ECAlgorithm(Algorithm):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Performs signing and verification operations using 
+        ECDSA and the specified hash function 
+        &quot;&quot;&quot;</span>
+
+        <span class="s1">SHA256 = hashes.SHA256</span>
+        <span class="s1">SHA384 = hashes.SHA384</span>
+        <span class="s1">SHA512 = hashes.SHA512</span>
+
+        <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">hash_alg):</span>
+            <span class="s1">self.hash_alg = hash_alg</span>
+
+        <span class="s0">def </span><span class="s1">prepare_key(self</span><span class="s0">, </span><span class="s1">key):</span>
+            <span class="s0">if </span><span class="s1">isinstance(key</span><span class="s0">, </span><span class="s1">(EllipticCurvePrivateKey</span><span class="s0">, </span><span class="s1">EllipticCurvePublicKey)):</span>
+                <span class="s0">return </span><span class="s1">key</span>
+
+            <span class="s0">if not </span><span class="s1">isinstance(key</span><span class="s0">, </span><span class="s1">(bytes</span><span class="s0">, </span><span class="s1">str)):</span>
+                <span class="s0">raise </span><span class="s1">TypeError(</span><span class="s2">&quot;Expecting a PEM-formatted key.&quot;</span><span class="s1">)</span>
+
+            <span class="s1">key = force_bytes(key)</span>
+
+            <span class="s4"># Attempt to load key. We don't know if it's</span>
+            <span class="s4"># a Signing Key or a Verifying Key, so we try</span>
+            <span class="s4"># the Verifying Key first.</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s0">if </span><span class="s1">key.startswith(</span><span class="s5">b&quot;ecdsa-sha2-&quot;</span><span class="s1">):</span>
+                    <span class="s1">key = load_ssh_public_key(key)</span>
+                <span class="s0">else</span><span class="s1">:</span>
+                    <span class="s1">key = load_pem_public_key(key)</span>
+            <span class="s0">except </span><span class="s1">ValueError:</span>
+                <span class="s1">key = load_pem_private_key(key</span><span class="s0">, </span><span class="s1">password=</span><span class="s0">None</span><span class="s1">)</span>
+
+            <span class="s4"># Explicit check the key to prevent confusing errors from cryptography</span>
+            <span class="s0">if not </span><span class="s1">isinstance(key</span><span class="s0">, </span><span class="s1">(EllipticCurvePrivateKey</span><span class="s0">, </span><span class="s1">EllipticCurvePublicKey)):</span>
+                <span class="s0">raise </span><span class="s1">InvalidKeyError(</span>
+                    <span class="s2">&quot;Expecting a EllipticCurvePrivateKey/EllipticCurvePublicKey. Wrong key provided for ECDSA algorithms&quot;</span>
+                <span class="s1">)</span>
+
+            <span class="s0">return </span><span class="s1">key</span>
+
+        <span class="s0">def </span><span class="s1">sign(self</span><span class="s0">, </span><span class="s1">msg</span><span class="s0">, </span><span class="s1">key):</span>
+            <span class="s1">der_sig = key.sign(msg</span><span class="s0">, </span><span class="s1">ec.ECDSA(self.hash_alg()))</span>
+
+            <span class="s0">return </span><span class="s1">der_to_raw_signature(der_sig</span><span class="s0">, </span><span class="s1">key.curve)</span>
+
+        <span class="s0">def </span><span class="s1">verify(self</span><span class="s0">, </span><span class="s1">msg</span><span class="s0">, </span><span class="s1">key</span><span class="s0">, </span><span class="s1">sig):</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s1">der_sig = raw_to_der_signature(sig</span><span class="s0">, </span><span class="s1">key.curve)</span>
+            <span class="s0">except </span><span class="s1">ValueError:</span>
+                <span class="s0">return False</span>
+
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s0">if </span><span class="s1">isinstance(key</span><span class="s0">, </span><span class="s1">EllipticCurvePrivateKey):</span>
+                    <span class="s1">key = key.public_key()</span>
+                <span class="s1">key.verify(der_sig</span><span class="s0">, </span><span class="s1">msg</span><span class="s0">, </span><span class="s1">ec.ECDSA(self.hash_alg()))</span>
+                <span class="s0">return True</span>
+            <span class="s0">except </span><span class="s1">InvalidSignature:</span>
+                <span class="s0">return False</span>
+
+        <span class="s1">@staticmethod</span>
+        <span class="s0">def </span><span class="s1">to_jwk(key_obj):</span>
+
+            <span class="s0">if </span><span class="s1">isinstance(key_obj</span><span class="s0">, </span><span class="s1">EllipticCurvePrivateKey):</span>
+                <span class="s1">public_numbers = key_obj.public_key().public_numbers()</span>
+            <span class="s0">elif </span><span class="s1">isinstance(key_obj</span><span class="s0">, </span><span class="s1">EllipticCurvePublicKey):</span>
+                <span class="s1">public_numbers = key_obj.public_numbers()</span>
+            <span class="s0">else</span><span class="s1">:</span>
+                <span class="s0">raise </span><span class="s1">InvalidKeyError(</span><span class="s2">&quot;Not a public or private key&quot;</span><span class="s1">)</span>
+
+            <span class="s0">if </span><span class="s1">isinstance(key_obj.curve</span><span class="s0">, </span><span class="s1">ec.SECP256R1):</span>
+                <span class="s1">crv = </span><span class="s2">&quot;P-256&quot;</span>
+            <span class="s0">elif </span><span class="s1">isinstance(key_obj.curve</span><span class="s0">, </span><span class="s1">ec.SECP384R1):</span>
+                <span class="s1">crv = </span><span class="s2">&quot;P-384&quot;</span>
+            <span class="s0">elif </span><span class="s1">isinstance(key_obj.curve</span><span class="s0">, </span><span class="s1">ec.SECP521R1):</span>
+                <span class="s1">crv = </span><span class="s2">&quot;P-521&quot;</span>
+            <span class="s0">elif </span><span class="s1">isinstance(key_obj.curve</span><span class="s0">, </span><span class="s1">ec.SECP256K1):</span>
+                <span class="s1">crv = </span><span class="s2">&quot;secp256k1&quot;</span>
+            <span class="s0">else</span><span class="s1">:</span>
+                <span class="s0">raise </span><span class="s1">InvalidKeyError(</span><span class="s2">f&quot;Invalid curve: </span><span class="s0">{</span><span class="s1">key_obj.curve</span><span class="s0">}</span><span class="s2">&quot;</span><span class="s1">)</span>
+
+            <span class="s1">obj = {</span>
+                <span class="s2">&quot;kty&quot;</span><span class="s1">: </span><span class="s2">&quot;EC&quot;</span><span class="s0">,</span>
+                <span class="s2">&quot;crv&quot;</span><span class="s1">: crv</span><span class="s0">,</span>
+                <span class="s2">&quot;x&quot;</span><span class="s1">: to_base64url_uint(public_numbers.x).decode()</span><span class="s0">,</span>
+                <span class="s2">&quot;y&quot;</span><span class="s1">: to_base64url_uint(public_numbers.y).decode()</span><span class="s0">,</span>
+            <span class="s1">}</span>
+
+            <span class="s0">if </span><span class="s1">isinstance(key_obj</span><span class="s0">, </span><span class="s1">EllipticCurvePrivateKey):</span>
+                <span class="s1">obj[</span><span class="s2">&quot;d&quot;</span><span class="s1">] = to_base64url_uint(</span>
+                    <span class="s1">key_obj.private_numbers().private_value</span>
+                <span class="s1">).decode()</span>
+
+            <span class="s0">return </span><span class="s1">json.dumps(obj)</span>
+
+        <span class="s1">@staticmethod</span>
+        <span class="s0">def </span><span class="s1">from_jwk(jwk):</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s0">if </span><span class="s1">isinstance(jwk</span><span class="s0">, </span><span class="s1">str):</span>
+                    <span class="s1">obj = json.loads(jwk)</span>
+                <span class="s0">elif </span><span class="s1">isinstance(jwk</span><span class="s0">, </span><span class="s1">dict):</span>
+                    <span class="s1">obj = jwk</span>
+                <span class="s0">else</span><span class="s1">:</span>
+                    <span class="s0">raise </span><span class="s1">ValueError</span>
+            <span class="s0">except </span><span class="s1">ValueError:</span>
+                <span class="s0">raise </span><span class="s1">InvalidKeyError(</span><span class="s2">&quot;Key is not valid JSON&quot;</span><span class="s1">)</span>
+
+            <span class="s0">if </span><span class="s1">obj.get(</span><span class="s2">&quot;kty&quot;</span><span class="s1">) != </span><span class="s2">&quot;EC&quot;</span><span class="s1">:</span>
+                <span class="s0">raise </span><span class="s1">InvalidKeyError(</span><span class="s2">&quot;Not an Elliptic curve key&quot;</span><span class="s1">)</span>
+
+            <span class="s0">if </span><span class="s2">&quot;x&quot; </span><span class="s0">not in </span><span class="s1">obj </span><span class="s0">or </span><span class="s2">&quot;y&quot; </span><span class="s0">not in </span><span class="s1">obj:</span>
+                <span class="s0">raise </span><span class="s1">InvalidKeyError(</span><span class="s2">&quot;Not an Elliptic curve key&quot;</span><span class="s1">)</span>
+
+            <span class="s1">x = base64url_decode(obj.get(</span><span class="s2">&quot;x&quot;</span><span class="s1">))</span>
+            <span class="s1">y = base64url_decode(obj.get(</span><span class="s2">&quot;y&quot;</span><span class="s1">))</span>
+
+            <span class="s1">curve = obj.get(</span><span class="s2">&quot;crv&quot;</span><span class="s1">)</span>
+            <span class="s0">if </span><span class="s1">curve == </span><span class="s2">&quot;P-256&quot;</span><span class="s1">:</span>
+                <span class="s0">if </span><span class="s1">len(x) == len(y) == </span><span class="s6">32</span><span class="s1">:</span>
+                    <span class="s1">curve_obj = ec.SECP256R1()</span>
+                <span class="s0">else</span><span class="s1">:</span>
+                    <span class="s0">raise </span><span class="s1">InvalidKeyError(</span><span class="s2">&quot;Coords should be 32 bytes for curve P-256&quot;</span><span class="s1">)</span>
+            <span class="s0">elif </span><span class="s1">curve == </span><span class="s2">&quot;P-384&quot;</span><span class="s1">:</span>
+                <span class="s0">if </span><span class="s1">len(x) == len(y) == </span><span class="s6">48</span><span class="s1">:</span>
+                    <span class="s1">curve_obj = ec.SECP384R1()</span>
+                <span class="s0">else</span><span class="s1">:</span>
+                    <span class="s0">raise </span><span class="s1">InvalidKeyError(</span><span class="s2">&quot;Coords should be 48 bytes for curve P-384&quot;</span><span class="s1">)</span>
+            <span class="s0">elif </span><span class="s1">curve == </span><span class="s2">&quot;P-521&quot;</span><span class="s1">:</span>
+                <span class="s0">if </span><span class="s1">len(x) == len(y) == </span><span class="s6">66</span><span class="s1">:</span>
+                    <span class="s1">curve_obj = ec.SECP521R1()</span>
+                <span class="s0">else</span><span class="s1">:</span>
+                    <span class="s0">raise </span><span class="s1">InvalidKeyError(</span><span class="s2">&quot;Coords should be 66 bytes for curve P-521&quot;</span><span class="s1">)</span>
+            <span class="s0">elif </span><span class="s1">curve == </span><span class="s2">&quot;secp256k1&quot;</span><span class="s1">:</span>
+                <span class="s0">if </span><span class="s1">len(x) == len(y) == </span><span class="s6">32</span><span class="s1">:</span>
+                    <span class="s1">curve_obj = ec.SECP256K1()</span>
+                <span class="s0">else</span><span class="s1">:</span>
+                    <span class="s0">raise </span><span class="s1">InvalidKeyError(</span>
+                        <span class="s2">&quot;Coords should be 32 bytes for curve secp256k1&quot;</span>
+                    <span class="s1">)</span>
+            <span class="s0">else</span><span class="s1">:</span>
+                <span class="s0">raise </span><span class="s1">InvalidKeyError(</span><span class="s2">f&quot;Invalid curve: </span><span class="s0">{</span><span class="s1">curve</span><span class="s0">}</span><span class="s2">&quot;</span><span class="s1">)</span>
+
+            <span class="s1">public_numbers = ec.EllipticCurvePublicNumbers(</span>
+                <span class="s1">x=int.from_bytes(x</span><span class="s0">, </span><span class="s1">byteorder=</span><span class="s2">&quot;big&quot;</span><span class="s1">)</span><span class="s0">,</span>
+                <span class="s1">y=int.from_bytes(y</span><span class="s0">, </span><span class="s1">byteorder=</span><span class="s2">&quot;big&quot;</span><span class="s1">)</span><span class="s0">,</span>
+                <span class="s1">curve=curve_obj</span><span class="s0">,</span>
+            <span class="s1">)</span>
+
+            <span class="s0">if </span><span class="s2">&quot;d&quot; </span><span class="s0">not in </span><span class="s1">obj:</span>
+                <span class="s0">return </span><span class="s1">public_numbers.public_key()</span>
+
+            <span class="s1">d = base64url_decode(obj.get(</span><span class="s2">&quot;d&quot;</span><span class="s1">))</span>
+            <span class="s0">if </span><span class="s1">len(d) != len(x):</span>
+                <span class="s0">raise </span><span class="s1">InvalidKeyError(</span>
+                    <span class="s2">&quot;D should be {} bytes for curve {}&quot;</span><span class="s0">, </span><span class="s1">len(x)</span><span class="s0">, </span><span class="s1">curve</span>
+                <span class="s1">)</span>
+
+            <span class="s0">return </span><span class="s1">ec.EllipticCurvePrivateNumbers(</span>
+                <span class="s1">int.from_bytes(d</span><span class="s0">, </span><span class="s1">byteorder=</span><span class="s2">&quot;big&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s1">public_numbers</span>
+            <span class="s1">).private_key()</span>
+
+    <span class="s0">class </span><span class="s1">RSAPSSAlgorithm(RSAAlgorithm):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Performs a signature using RSASSA-PSS with MGF1 
+        &quot;&quot;&quot;</span>
+
+        <span class="s0">def </span><span class="s1">sign(self</span><span class="s0">, </span><span class="s1">msg</span><span class="s0">, </span><span class="s1">key):</span>
+            <span class="s0">return </span><span class="s1">key.sign(</span>
+                <span class="s1">msg</span><span class="s0">,</span>
+                <span class="s1">padding.PSS(</span>
+                    <span class="s1">mgf=padding.MGF1(self.hash_alg())</span><span class="s0">,</span>
+                    <span class="s1">salt_length=self.hash_alg.digest_size</span><span class="s0">,</span>
+                <span class="s1">)</span><span class="s0">,</span>
+                <span class="s1">self.hash_alg()</span><span class="s0">,</span>
+            <span class="s1">)</span>
+
+        <span class="s0">def </span><span class="s1">verify(self</span><span class="s0">, </span><span class="s1">msg</span><span class="s0">, </span><span class="s1">key</span><span class="s0">, </span><span class="s1">sig):</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s1">key.verify(</span>
+                    <span class="s1">sig</span><span class="s0">,</span>
+                    <span class="s1">msg</span><span class="s0">,</span>
+                    <span class="s1">padding.PSS(</span>
+                        <span class="s1">mgf=padding.MGF1(self.hash_alg())</span><span class="s0">,</span>
+                        <span class="s1">salt_length=self.hash_alg.digest_size</span><span class="s0">,</span>
+                    <span class="s1">)</span><span class="s0">,</span>
+                    <span class="s1">self.hash_alg()</span><span class="s0">,</span>
+                <span class="s1">)</span>
+                <span class="s0">return True</span>
+            <span class="s0">except </span><span class="s1">InvalidSignature:</span>
+                <span class="s0">return False</span>
+
+    <span class="s0">class </span><span class="s1">OKPAlgorithm(Algorithm):</span>
+        <span class="s3">&quot;&quot;&quot; 
+        Performs signing and verification operations using EdDSA 
+ 
+        This class requires ``cryptography&gt;=2.6`` to be installed. 
+        &quot;&quot;&quot;</span>
+
+        <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">**kwargs):</span>
+            <span class="s0">pass</span>
+
+        <span class="s0">def </span><span class="s1">prepare_key(self</span><span class="s0">, </span><span class="s1">key):</span>
+            <span class="s0">if </span><span class="s1">isinstance(key</span><span class="s0">, </span><span class="s1">(bytes</span><span class="s0">, </span><span class="s1">str)):</span>
+                <span class="s0">if </span><span class="s1">isinstance(key</span><span class="s0">, </span><span class="s1">str):</span>
+                    <span class="s1">key = key.encode(</span><span class="s2">&quot;utf-8&quot;</span><span class="s1">)</span>
+                <span class="s1">str_key = key.decode(</span><span class="s2">&quot;utf-8&quot;</span><span class="s1">)</span>
+
+                <span class="s0">if </span><span class="s2">&quot;-----BEGIN PUBLIC&quot; </span><span class="s0">in </span><span class="s1">str_key:</span>
+                    <span class="s1">key = load_pem_public_key(key)</span>
+                <span class="s0">elif </span><span class="s2">&quot;-----BEGIN PRIVATE&quot; </span><span class="s0">in </span><span class="s1">str_key:</span>
+                    <span class="s1">key = load_pem_private_key(key</span><span class="s0">, </span><span class="s1">password=</span><span class="s0">None</span><span class="s1">)</span>
+                <span class="s0">elif </span><span class="s1">str_key[</span><span class="s6">0</span><span class="s1">:</span><span class="s6">4</span><span class="s1">] == </span><span class="s2">&quot;ssh-&quot;</span><span class="s1">:</span>
+                    <span class="s1">key = load_ssh_public_key(key)</span>
+
+            <span class="s4"># Explicit check the key to prevent confusing errors from cryptography</span>
+            <span class="s0">if not </span><span class="s1">isinstance(</span>
+                <span class="s1">key</span><span class="s0">,</span>
+                <span class="s1">(Ed25519PrivateKey</span><span class="s0">, </span><span class="s1">Ed25519PublicKey</span><span class="s0">, </span><span class="s1">Ed448PrivateKey</span><span class="s0">, </span><span class="s1">Ed448PublicKey)</span><span class="s0">,</span>
+            <span class="s1">):</span>
+                <span class="s0">raise </span><span class="s1">InvalidKeyError(</span>
+                    <span class="s2">&quot;Expecting a EllipticCurvePrivateKey/EllipticCurvePublicKey. Wrong key provided for EdDSA algorithms&quot;</span>
+                <span class="s1">)</span>
+
+            <span class="s0">return </span><span class="s1">key</span>
+
+        <span class="s0">def </span><span class="s1">sign(self</span><span class="s0">, </span><span class="s1">msg</span><span class="s0">, </span><span class="s1">key):</span>
+            <span class="s3">&quot;&quot;&quot; 
+            Sign a message ``msg`` using the EdDSA private key ``key`` 
+            :param str|bytes msg: Message to sign 
+            :param Ed25519PrivateKey}Ed448PrivateKey key: A :class:`.Ed25519PrivateKey` 
+                or :class:`.Ed448PrivateKey` isinstance 
+            :return bytes signature: The signature, as bytes 
+            &quot;&quot;&quot;</span>
+            <span class="s1">msg = bytes(msg</span><span class="s0">, </span><span class="s2">&quot;utf-8&quot;</span><span class="s1">) </span><span class="s0">if </span><span class="s1">type(msg) </span><span class="s0">is not </span><span class="s1">bytes </span><span class="s0">else </span><span class="s1">msg</span>
+            <span class="s0">return </span><span class="s1">key.sign(msg)</span>
+
+        <span class="s0">def </span><span class="s1">verify(self</span><span class="s0">, </span><span class="s1">msg</span><span class="s0">, </span><span class="s1">key</span><span class="s0">, </span><span class="s1">sig):</span>
+            <span class="s3">&quot;&quot;&quot; 
+            Verify a given ``msg`` against a signature ``sig`` using the EdDSA key ``key`` 
+ 
+            :param str|bytes sig: EdDSA signature to check ``msg`` against 
+            :param str|bytes msg: Message to sign 
+            :param Ed25519PrivateKey|Ed25519PublicKey|Ed448PrivateKey|Ed448PublicKey key: 
+                A private or public EdDSA key instance 
+            :return bool verified: True if signature is valid, False if not. 
+            &quot;&quot;&quot;</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s1">msg = bytes(msg</span><span class="s0">, </span><span class="s2">&quot;utf-8&quot;</span><span class="s1">) </span><span class="s0">if </span><span class="s1">type(msg) </span><span class="s0">is not </span><span class="s1">bytes </span><span class="s0">else </span><span class="s1">msg</span>
+                <span class="s1">sig = bytes(sig</span><span class="s0">, </span><span class="s2">&quot;utf-8&quot;</span><span class="s1">) </span><span class="s0">if </span><span class="s1">type(sig) </span><span class="s0">is not </span><span class="s1">bytes </span><span class="s0">else </span><span class="s1">sig</span>
+
+                <span class="s0">if </span><span class="s1">isinstance(key</span><span class="s0">, </span><span class="s1">(Ed25519PrivateKey</span><span class="s0">, </span><span class="s1">Ed448PrivateKey)):</span>
+                    <span class="s1">key = key.public_key()</span>
+                <span class="s1">key.verify(sig</span><span class="s0">, </span><span class="s1">msg)</span>
+                <span class="s0">return True  </span><span class="s4"># If no exception was raised, the signature is valid.</span>
+            <span class="s0">except </span><span class="s1">cryptography.exceptions.InvalidSignature:</span>
+                <span class="s0">return False</span>
+
+        <span class="s1">@staticmethod</span>
+        <span class="s0">def </span><span class="s1">to_jwk(key):</span>
+            <span class="s0">if </span><span class="s1">isinstance(key</span><span class="s0">, </span><span class="s1">(Ed25519PublicKey</span><span class="s0">, </span><span class="s1">Ed448PublicKey)):</span>
+                <span class="s1">x = key.public_bytes(</span>
+                    <span class="s1">encoding=Encoding.Raw</span><span class="s0">,</span>
+                    <span class="s1">format=PublicFormat.Raw</span><span class="s0">,</span>
+                <span class="s1">)</span>
+                <span class="s1">crv = </span><span class="s2">&quot;Ed25519&quot; </span><span class="s0">if </span><span class="s1">isinstance(key</span><span class="s0">, </span><span class="s1">Ed25519PublicKey) </span><span class="s0">else </span><span class="s2">&quot;Ed448&quot;</span>
+                <span class="s0">return </span><span class="s1">json.dumps(</span>
+                    <span class="s1">{</span>
+                        <span class="s2">&quot;x&quot;</span><span class="s1">: base64url_encode(force_bytes(x)).decode()</span><span class="s0">,</span>
+                        <span class="s2">&quot;kty&quot;</span><span class="s1">: </span><span class="s2">&quot;OKP&quot;</span><span class="s0">,</span>
+                        <span class="s2">&quot;crv&quot;</span><span class="s1">: crv</span><span class="s0">,</span>
+                    <span class="s1">}</span>
+                <span class="s1">)</span>
+
+            <span class="s0">if </span><span class="s1">isinstance(key</span><span class="s0">, </span><span class="s1">(Ed25519PrivateKey</span><span class="s0">, </span><span class="s1">Ed448PrivateKey)):</span>
+                <span class="s1">d = key.private_bytes(</span>
+                    <span class="s1">encoding=Encoding.Raw</span><span class="s0">,</span>
+                    <span class="s1">format=PrivateFormat.Raw</span><span class="s0">,</span>
+                    <span class="s1">encryption_algorithm=NoEncryption()</span><span class="s0">,</span>
+                <span class="s1">)</span>
+
+                <span class="s1">x = key.public_key().public_bytes(</span>
+                    <span class="s1">encoding=Encoding.Raw</span><span class="s0">,</span>
+                    <span class="s1">format=PublicFormat.Raw</span><span class="s0">,</span>
+                <span class="s1">)</span>
+
+                <span class="s1">crv = </span><span class="s2">&quot;Ed25519&quot; </span><span class="s0">if </span><span class="s1">isinstance(key</span><span class="s0">, </span><span class="s1">Ed25519PrivateKey) </span><span class="s0">else </span><span class="s2">&quot;Ed448&quot;</span>
+                <span class="s0">return </span><span class="s1">json.dumps(</span>
+                    <span class="s1">{</span>
+                        <span class="s2">&quot;x&quot;</span><span class="s1">: base64url_encode(force_bytes(x)).decode()</span><span class="s0">,</span>
+                        <span class="s2">&quot;d&quot;</span><span class="s1">: base64url_encode(force_bytes(d)).decode()</span><span class="s0">,</span>
+                        <span class="s2">&quot;kty&quot;</span><span class="s1">: </span><span class="s2">&quot;OKP&quot;</span><span class="s0">,</span>
+                        <span class="s2">&quot;crv&quot;</span><span class="s1">: crv</span><span class="s0">,</span>
+                    <span class="s1">}</span>
+                <span class="s1">)</span>
+
+            <span class="s0">raise </span><span class="s1">InvalidKeyError(</span><span class="s2">&quot;Not a public or private key&quot;</span><span class="s1">)</span>
+
+        <span class="s1">@staticmethod</span>
+        <span class="s0">def </span><span class="s1">from_jwk(jwk):</span>
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s0">if </span><span class="s1">isinstance(jwk</span><span class="s0">, </span><span class="s1">str):</span>
+                    <span class="s1">obj = json.loads(jwk)</span>
+                <span class="s0">elif </span><span class="s1">isinstance(jwk</span><span class="s0">, </span><span class="s1">dict):</span>
+                    <span class="s1">obj = jwk</span>
+                <span class="s0">else</span><span class="s1">:</span>
+                    <span class="s0">raise </span><span class="s1">ValueError</span>
+            <span class="s0">except </span><span class="s1">ValueError:</span>
+                <span class="s0">raise </span><span class="s1">InvalidKeyError(</span><span class="s2">&quot;Key is not valid JSON&quot;</span><span class="s1">)</span>
+
+            <span class="s0">if </span><span class="s1">obj.get(</span><span class="s2">&quot;kty&quot;</span><span class="s1">) != </span><span class="s2">&quot;OKP&quot;</span><span class="s1">:</span>
+                <span class="s0">raise </span><span class="s1">InvalidKeyError(</span><span class="s2">&quot;Not an Octet Key Pair&quot;</span><span class="s1">)</span>
+
+            <span class="s1">curve = obj.get(</span><span class="s2">&quot;crv&quot;</span><span class="s1">)</span>
+            <span class="s0">if </span><span class="s1">curve != </span><span class="s2">&quot;Ed25519&quot; </span><span class="s0">and </span><span class="s1">curve != </span><span class="s2">&quot;Ed448&quot;</span><span class="s1">:</span>
+                <span class="s0">raise </span><span class="s1">InvalidKeyError(</span><span class="s2">f&quot;Invalid curve: </span><span class="s0">{</span><span class="s1">curve</span><span class="s0">}</span><span class="s2">&quot;</span><span class="s1">)</span>
+
+            <span class="s0">if </span><span class="s2">&quot;x&quot; </span><span class="s0">not in </span><span class="s1">obj:</span>
+                <span class="s0">raise </span><span class="s1">InvalidKeyError(</span><span class="s2">'OKP should have &quot;x&quot; parameter'</span><span class="s1">)</span>
+            <span class="s1">x = base64url_decode(obj.get(</span><span class="s2">&quot;x&quot;</span><span class="s1">))</span>
+
+            <span class="s0">try</span><span class="s1">:</span>
+                <span class="s0">if </span><span class="s2">&quot;d&quot; </span><span class="s0">not in </span><span class="s1">obj:</span>
+                    <span class="s0">if </span><span class="s1">curve == </span><span class="s2">&quot;Ed25519&quot;</span><span class="s1">:</span>
+                        <span class="s0">return </span><span class="s1">Ed25519PublicKey.from_public_bytes(x)</span>
+                    <span class="s0">return </span><span class="s1">Ed448PublicKey.from_public_bytes(x)</span>
+                <span class="s1">d = base64url_decode(obj.get(</span><span class="s2">&quot;d&quot;</span><span class="s1">))</span>
+                <span class="s0">if </span><span class="s1">curve == </span><span class="s2">&quot;Ed25519&quot;</span><span class="s1">:</span>
+                    <span class="s0">return </span><span class="s1">Ed25519PrivateKey.from_private_bytes(d)</span>
+                <span class="s0">return </span><span class="s1">Ed448PrivateKey.from_private_bytes(d)</span>
+            <span class="s0">except </span><span class="s1">ValueError </span><span class="s0">as </span><span class="s1">err:</span>
+                <span class="s0">raise </span><span class="s1">InvalidKeyError(</span><span class="s2">&quot;Invalid key parameter&quot;</span><span class="s1">) </span><span class="s0">from </span><span class="s1">err</span>
+</pre>
+</body>
+</html>

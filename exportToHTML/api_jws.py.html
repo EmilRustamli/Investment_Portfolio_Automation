@@ -1,0 +1,342 @@
+<html>
+<head>
+<title>api_jws.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #808080;}
+.s4 { color: #629755; font-style: italic;}
+.s5 { color: #a5c261;}
+.s6 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+api_jws.py</font>
+</center></td></tr></table>
+<pre><span class="s0">from </span><span class="s1">__future__ </span><span class="s0">import </span><span class="s1">annotations</span>
+
+<span class="s0">import </span><span class="s1">binascii</span>
+<span class="s0">import </span><span class="s1">json</span>
+<span class="s0">import </span><span class="s1">warnings</span>
+<span class="s0">from </span><span class="s1">typing </span><span class="s0">import </span><span class="s1">Any</span><span class="s0">, </span><span class="s1">Type</span>
+
+<span class="s0">from </span><span class="s1">.algorithms </span><span class="s0">import </span><span class="s1">(</span>
+    <span class="s1">Algorithm</span><span class="s0">,</span>
+    <span class="s1">get_default_algorithms</span><span class="s0">,</span>
+    <span class="s1">has_crypto</span><span class="s0">,</span>
+    <span class="s1">requires_cryptography</span><span class="s0">,</span>
+<span class="s1">)</span>
+<span class="s0">from </span><span class="s1">.exceptions </span><span class="s0">import </span><span class="s1">(</span>
+    <span class="s1">DecodeError</span><span class="s0">,</span>
+    <span class="s1">InvalidAlgorithmError</span><span class="s0">,</span>
+    <span class="s1">InvalidSignatureError</span><span class="s0">,</span>
+    <span class="s1">InvalidTokenError</span><span class="s0">,</span>
+<span class="s1">)</span>
+<span class="s0">from </span><span class="s1">.utils </span><span class="s0">import </span><span class="s1">base64url_decode</span><span class="s0">, </span><span class="s1">base64url_encode</span>
+<span class="s0">from </span><span class="s1">.warnings </span><span class="s0">import </span><span class="s1">RemovedInPyjwt3Warning</span>
+
+
+<span class="s0">class </span><span class="s1">PyJWS:</span>
+    <span class="s1">header_typ = </span><span class="s2">&quot;JWT&quot;</span>
+
+    <span class="s0">def </span><span class="s1">__init__(self</span><span class="s0">, </span><span class="s1">algorithms=</span><span class="s0">None, </span><span class="s1">options=</span><span class="s0">None</span><span class="s1">) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s1">self._algorithms = get_default_algorithms()</span>
+        <span class="s1">self._valid_algs = (</span>
+            <span class="s1">set(algorithms) </span><span class="s0">if </span><span class="s1">algorithms </span><span class="s0">is not None else </span><span class="s1">set(self._algorithms)</span>
+        <span class="s1">)</span>
+
+        <span class="s3"># Remove algorithms that aren't on the whitelist</span>
+        <span class="s0">for </span><span class="s1">key </span><span class="s0">in </span><span class="s1">list(self._algorithms.keys()):</span>
+            <span class="s0">if </span><span class="s1">key </span><span class="s0">not in </span><span class="s1">self._valid_algs:</span>
+                <span class="s0">del </span><span class="s1">self._algorithms[key]</span>
+
+        <span class="s0">if </span><span class="s1">options </span><span class="s0">is None</span><span class="s1">:</span>
+            <span class="s1">options = {}</span>
+        <span class="s1">self.options = {**self._get_default_options()</span><span class="s0">, </span><span class="s1">**options}</span>
+
+    <span class="s1">@staticmethod</span>
+    <span class="s0">def </span><span class="s1">_get_default_options() -&gt; dict[str</span><span class="s0">, </span><span class="s1">bool]:</span>
+        <span class="s0">return </span><span class="s1">{</span><span class="s2">&quot;verify_signature&quot;</span><span class="s1">: </span><span class="s0">True</span><span class="s1">}</span>
+
+    <span class="s0">def </span><span class="s1">register_algorithm(self</span><span class="s0">, </span><span class="s1">alg_id: str</span><span class="s0">, </span><span class="s1">alg_obj: Algorithm) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Registers a new Algorithm for use when creating and verifying tokens. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">alg_id </span><span class="s0">in </span><span class="s1">self._algorithms:</span>
+            <span class="s0">raise </span><span class="s1">ValueError(</span><span class="s2">&quot;Algorithm already has a handler.&quot;</span><span class="s1">)</span>
+
+        <span class="s0">if not </span><span class="s1">isinstance(alg_obj</span><span class="s0">, </span><span class="s1">Algorithm):</span>
+            <span class="s0">raise </span><span class="s1">TypeError(</span><span class="s2">&quot;Object is not of type `Algorithm`&quot;</span><span class="s1">)</span>
+
+        <span class="s1">self._algorithms[alg_id] = alg_obj</span>
+        <span class="s1">self._valid_algs.add(alg_id)</span>
+
+    <span class="s0">def </span><span class="s1">unregister_algorithm(self</span><span class="s0">, </span><span class="s1">alg_id: str) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Unregisters an Algorithm for use when creating and verifying tokens 
+        Throws KeyError if algorithm is not registered. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">if </span><span class="s1">alg_id </span><span class="s0">not in </span><span class="s1">self._algorithms:</span>
+            <span class="s0">raise </span><span class="s1">KeyError(</span>
+                <span class="s2">&quot;The specified algorithm could not be removed&quot;</span>
+                <span class="s2">&quot; because it is not registered.&quot;</span>
+            <span class="s1">)</span>
+
+        <span class="s0">del </span><span class="s1">self._algorithms[alg_id]</span>
+        <span class="s1">self._valid_algs.remove(alg_id)</span>
+
+    <span class="s0">def </span><span class="s1">get_algorithms(self) -&gt; list[str]:</span>
+        <span class="s4">&quot;&quot;&quot; 
+        Returns a list of supported values for the 'alg' parameter. 
+        &quot;&quot;&quot;</span>
+        <span class="s0">return </span><span class="s1">list(self._valid_algs)</span>
+
+    <span class="s0">def </span><span class="s1">get_algorithm_by_name(self</span><span class="s0">, </span><span class="s1">alg_name: str) -&gt; Algorithm:</span>
+        <span class="s4">&quot;&quot;&quot; 
+        For a given string name, return the matching Algorithm object. 
+ 
+        Example usage: 
+ 
+        &gt;&gt;&gt; jws_obj.get_algorithm_by_name(&quot;RS256&quot;) 
+        &quot;&quot;&quot;</span>
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s0">return </span><span class="s1">self._algorithms[alg_name]</span>
+        <span class="s0">except </span><span class="s1">KeyError </span><span class="s0">as </span><span class="s1">e:</span>
+            <span class="s0">if not </span><span class="s1">has_crypto </span><span class="s0">and </span><span class="s1">alg_name </span><span class="s0">in </span><span class="s1">requires_cryptography:</span>
+                <span class="s0">raise </span><span class="s1">NotImplementedError(</span>
+                    <span class="s2">f&quot;Algorithm '</span><span class="s0">{</span><span class="s1">alg_name</span><span class="s0">}</span><span class="s2">' could not be found. Do you have cryptography installed?&quot;</span>
+                <span class="s1">) </span><span class="s0">from </span><span class="s1">e</span>
+            <span class="s0">raise </span><span class="s1">NotImplementedError(</span><span class="s2">&quot;Algorithm not supported&quot;</span><span class="s1">) </span><span class="s0">from </span><span class="s1">e</span>
+
+    <span class="s0">def </span><span class="s1">encode(</span>
+        <span class="s1">self</span><span class="s0">,</span>
+        <span class="s1">payload: bytes</span><span class="s0">,</span>
+        <span class="s1">key: str</span><span class="s0">,</span>
+        <span class="s1">algorithm: str | </span><span class="s0">None </span><span class="s1">= </span><span class="s2">&quot;HS256&quot;</span><span class="s0">,</span>
+        <span class="s1">headers: dict[str</span><span class="s0">, </span><span class="s1">Any] | </span><span class="s0">None </span><span class="s1">= </span><span class="s0">None,</span>
+        <span class="s1">json_encoder: Type[json.JSONEncoder] | </span><span class="s0">None </span><span class="s1">= </span><span class="s0">None,</span>
+        <span class="s1">is_payload_detached: bool = </span><span class="s0">False,</span>
+    <span class="s1">) -&gt; str:</span>
+        <span class="s1">segments = []</span>
+
+        <span class="s3"># declare a new var to narrow the type for type checkers</span>
+        <span class="s1">algorithm_: str = algorithm </span><span class="s0">if </span><span class="s1">algorithm </span><span class="s0">is not None else </span><span class="s2">&quot;none&quot;</span>
+
+        <span class="s3"># Prefer headers values if present to function parameters.</span>
+        <span class="s0">if </span><span class="s1">headers:</span>
+            <span class="s1">headers_alg = headers.get(</span><span class="s2">&quot;alg&quot;</span><span class="s1">)</span>
+            <span class="s0">if </span><span class="s1">headers_alg:</span>
+                <span class="s1">algorithm_ = headers[</span><span class="s2">&quot;alg&quot;</span><span class="s1">]</span>
+
+            <span class="s1">headers_b64 = headers.get(</span><span class="s2">&quot;b64&quot;</span><span class="s1">)</span>
+            <span class="s0">if </span><span class="s1">headers_b64 </span><span class="s0">is False</span><span class="s1">:</span>
+                <span class="s1">is_payload_detached = </span><span class="s0">True</span>
+
+        <span class="s3"># Header</span>
+        <span class="s1">header: dict[str</span><span class="s0">, </span><span class="s1">Any] = {</span><span class="s2">&quot;typ&quot;</span><span class="s1">: self.header_typ</span><span class="s0">, </span><span class="s2">&quot;alg&quot;</span><span class="s1">: algorithm_}</span>
+
+        <span class="s0">if </span><span class="s1">headers:</span>
+            <span class="s1">self._validate_headers(headers)</span>
+            <span class="s1">header.update(headers)</span>
+
+        <span class="s0">if not </span><span class="s1">header[</span><span class="s2">&quot;typ&quot;</span><span class="s1">]:</span>
+            <span class="s0">del </span><span class="s1">header[</span><span class="s2">&quot;typ&quot;</span><span class="s1">]</span>
+
+        <span class="s0">if </span><span class="s1">is_payload_detached:</span>
+            <span class="s1">header[</span><span class="s2">&quot;b64&quot;</span><span class="s1">] = </span><span class="s0">False</span>
+        <span class="s0">elif </span><span class="s2">&quot;b64&quot; </span><span class="s0">in </span><span class="s1">header:</span>
+            <span class="s3"># True is the standard value for b64, so no need for it</span>
+            <span class="s0">del </span><span class="s1">header[</span><span class="s2">&quot;b64&quot;</span><span class="s1">]</span>
+
+        <span class="s3"># Fix for headers misorder - issue #715</span>
+        <span class="s1">json_header = json.dumps(</span>
+            <span class="s1">header</span><span class="s0">, </span><span class="s1">separators=(</span><span class="s2">&quot;,&quot;</span><span class="s0">, </span><span class="s2">&quot;:&quot;</span><span class="s1">)</span><span class="s0">, </span><span class="s1">cls=json_encoder</span><span class="s0">, </span><span class="s1">sort_keys=</span><span class="s0">True</span>
+        <span class="s1">).encode()</span>
+
+        <span class="s1">segments.append(base64url_encode(json_header))</span>
+
+        <span class="s0">if </span><span class="s1">is_payload_detached:</span>
+            <span class="s1">msg_payload = payload</span>
+        <span class="s0">else</span><span class="s1">:</span>
+            <span class="s1">msg_payload = base64url_encode(payload)</span>
+        <span class="s1">segments.append(msg_payload)</span>
+
+        <span class="s3"># Segments</span>
+        <span class="s1">signing_input = </span><span class="s5">b&quot;.&quot;</span><span class="s1">.join(segments)</span>
+
+        <span class="s1">alg_obj = self.get_algorithm_by_name(algorithm_)</span>
+        <span class="s1">key = alg_obj.prepare_key(key)</span>
+        <span class="s1">signature = alg_obj.sign(signing_input</span><span class="s0">, </span><span class="s1">key)</span>
+
+        <span class="s1">segments.append(base64url_encode(signature))</span>
+
+        <span class="s3"># Don't put the payload content inside the encoded token when detached</span>
+        <span class="s0">if </span><span class="s1">is_payload_detached:</span>
+            <span class="s1">segments[</span><span class="s6">1</span><span class="s1">] = </span><span class="s5">b&quot;&quot;</span>
+        <span class="s1">encoded_string = </span><span class="s5">b&quot;.&quot;</span><span class="s1">.join(segments)</span>
+
+        <span class="s0">return </span><span class="s1">encoded_string.decode(</span><span class="s2">&quot;utf-8&quot;</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">decode_complete(</span>
+        <span class="s1">self</span><span class="s0">,</span>
+        <span class="s1">jwt: str</span><span class="s0">,</span>
+        <span class="s1">key: str = </span><span class="s2">&quot;&quot;</span><span class="s0">,</span>
+        <span class="s1">algorithms: list[str] | </span><span class="s0">None </span><span class="s1">= </span><span class="s0">None,</span>
+        <span class="s1">options: dict[str</span><span class="s0">, </span><span class="s1">Any] | </span><span class="s0">None </span><span class="s1">= </span><span class="s0">None,</span>
+        <span class="s1">detached_payload: bytes | </span><span class="s0">None </span><span class="s1">= </span><span class="s0">None,</span>
+        <span class="s1">**kwargs</span><span class="s0">,</span>
+    <span class="s1">) -&gt; dict[str</span><span class="s0">, </span><span class="s1">Any]:</span>
+        <span class="s0">if </span><span class="s1">kwargs:</span>
+            <span class="s1">warnings.warn(</span>
+                <span class="s2">&quot;passing additional kwargs to decode_complete() is deprecated &quot;</span>
+                <span class="s2">&quot;and will be removed in pyjwt version 3. &quot;</span>
+                <span class="s2">f&quot;Unsupported kwargs: </span><span class="s0">{</span><span class="s1">tuple(kwargs.keys())</span><span class="s0">}</span><span class="s2">&quot;</span><span class="s0">,</span>
+                <span class="s1">RemovedInPyjwt3Warning</span><span class="s0">,</span>
+            <span class="s1">)</span>
+        <span class="s0">if </span><span class="s1">options </span><span class="s0">is None</span><span class="s1">:</span>
+            <span class="s1">options = {}</span>
+        <span class="s1">merged_options = {**self.options</span><span class="s0">, </span><span class="s1">**options}</span>
+        <span class="s1">verify_signature = merged_options[</span><span class="s2">&quot;verify_signature&quot;</span><span class="s1">]</span>
+
+        <span class="s0">if </span><span class="s1">verify_signature </span><span class="s0">and not </span><span class="s1">algorithms:</span>
+            <span class="s0">raise </span><span class="s1">DecodeError(</span>
+                <span class="s2">'It is required that you pass in a value for the &quot;algorithms&quot; argument when calling decode().'</span>
+            <span class="s1">)</span>
+
+        <span class="s1">payload</span><span class="s0">, </span><span class="s1">signing_input</span><span class="s0">, </span><span class="s1">header</span><span class="s0">, </span><span class="s1">signature = self._load(jwt)</span>
+
+        <span class="s0">if </span><span class="s1">header.get(</span><span class="s2">&quot;b64&quot;</span><span class="s0">, True</span><span class="s1">) </span><span class="s0">is False</span><span class="s1">:</span>
+            <span class="s0">if </span><span class="s1">detached_payload </span><span class="s0">is None</span><span class="s1">:</span>
+                <span class="s0">raise </span><span class="s1">DecodeError(</span>
+                    <span class="s2">'It is required that you pass in a value for the &quot;detached_payload&quot; argument to decode a message having the b64 header set to false.'</span>
+                <span class="s1">)</span>
+            <span class="s1">payload = detached_payload</span>
+            <span class="s1">signing_input = </span><span class="s5">b&quot;.&quot;</span><span class="s1">.join([signing_input.rsplit(</span><span class="s5">b&quot;.&quot;</span><span class="s0">, </span><span class="s6">1</span><span class="s1">)[</span><span class="s6">0</span><span class="s1">]</span><span class="s0">, </span><span class="s1">payload])</span>
+
+        <span class="s0">if </span><span class="s1">verify_signature:</span>
+            <span class="s1">self._verify_signature(signing_input</span><span class="s0">, </span><span class="s1">header</span><span class="s0">, </span><span class="s1">signature</span><span class="s0">, </span><span class="s1">key</span><span class="s0">, </span><span class="s1">algorithms)</span>
+
+        <span class="s0">return </span><span class="s1">{</span>
+            <span class="s2">&quot;payload&quot;</span><span class="s1">: payload</span><span class="s0">,</span>
+            <span class="s2">&quot;header&quot;</span><span class="s1">: header</span><span class="s0">,</span>
+            <span class="s2">&quot;signature&quot;</span><span class="s1">: signature</span><span class="s0">,</span>
+        <span class="s1">}</span>
+
+    <span class="s0">def </span><span class="s1">decode(</span>
+        <span class="s1">self</span><span class="s0">,</span>
+        <span class="s1">jwt: str</span><span class="s0">,</span>
+        <span class="s1">key: str = </span><span class="s2">&quot;&quot;</span><span class="s0">,</span>
+        <span class="s1">algorithms: list[str] | </span><span class="s0">None </span><span class="s1">= </span><span class="s0">None,</span>
+        <span class="s1">options: dict[str</span><span class="s0">, </span><span class="s1">Any] | </span><span class="s0">None </span><span class="s1">= </span><span class="s0">None,</span>
+        <span class="s1">detached_payload: bytes | </span><span class="s0">None </span><span class="s1">= </span><span class="s0">None,</span>
+        <span class="s1">**kwargs</span><span class="s0">,</span>
+    <span class="s1">) -&gt; str:</span>
+        <span class="s0">if </span><span class="s1">kwargs:</span>
+            <span class="s1">warnings.warn(</span>
+                <span class="s2">&quot;passing additional kwargs to decode() is deprecated &quot;</span>
+                <span class="s2">&quot;and will be removed in pyjwt version 3. &quot;</span>
+                <span class="s2">f&quot;Unsupported kwargs: </span><span class="s0">{</span><span class="s1">tuple(kwargs.keys())</span><span class="s0">}</span><span class="s2">&quot;</span><span class="s0">,</span>
+                <span class="s1">RemovedInPyjwt3Warning</span><span class="s0">,</span>
+            <span class="s1">)</span>
+        <span class="s1">decoded = self.decode_complete(</span>
+            <span class="s1">jwt</span><span class="s0">, </span><span class="s1">key</span><span class="s0">, </span><span class="s1">algorithms</span><span class="s0">, </span><span class="s1">options</span><span class="s0">, </span><span class="s1">detached_payload=detached_payload</span>
+        <span class="s1">)</span>
+        <span class="s0">return </span><span class="s1">decoded[</span><span class="s2">&quot;payload&quot;</span><span class="s1">]</span>
+
+    <span class="s0">def </span><span class="s1">get_unverified_header(self</span><span class="s0">, </span><span class="s1">jwt: str | bytes) -&gt; dict:</span>
+        <span class="s4">&quot;&quot;&quot;Returns back the JWT header parameters as a dict() 
+ 
+        Note: The signature is not verified so the header parameters 
+        should not be fully trusted until signature verification is complete 
+        &quot;&quot;&quot;</span>
+        <span class="s1">headers = self._load(jwt)[</span><span class="s6">2</span><span class="s1">]</span>
+        <span class="s1">self._validate_headers(headers)</span>
+
+        <span class="s0">return </span><span class="s1">headers</span>
+
+    <span class="s0">def </span><span class="s1">_load(self</span><span class="s0">, </span><span class="s1">jwt: str | bytes) -&gt; tuple[bytes</span><span class="s0">, </span><span class="s1">bytes</span><span class="s0">, </span><span class="s1">dict</span><span class="s0">, </span><span class="s1">bytes]:</span>
+        <span class="s0">if </span><span class="s1">isinstance(jwt</span><span class="s0">, </span><span class="s1">str):</span>
+            <span class="s1">jwt = jwt.encode(</span><span class="s2">&quot;utf-8&quot;</span><span class="s1">)</span>
+
+        <span class="s0">if not </span><span class="s1">isinstance(jwt</span><span class="s0">, </span><span class="s1">bytes):</span>
+            <span class="s0">raise </span><span class="s1">DecodeError(</span><span class="s2">f&quot;Invalid token type. Token must be a </span><span class="s0">{</span><span class="s1">bytes</span><span class="s0">}</span><span class="s2">&quot;</span><span class="s1">)</span>
+
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">signing_input</span><span class="s0">, </span><span class="s1">crypto_segment = jwt.rsplit(</span><span class="s5">b&quot;.&quot;</span><span class="s0">, </span><span class="s6">1</span><span class="s1">)</span>
+            <span class="s1">header_segment</span><span class="s0">, </span><span class="s1">payload_segment = signing_input.split(</span><span class="s5">b&quot;.&quot;</span><span class="s0">, </span><span class="s6">1</span><span class="s1">)</span>
+        <span class="s0">except </span><span class="s1">ValueError </span><span class="s0">as </span><span class="s1">err:</span>
+            <span class="s0">raise </span><span class="s1">DecodeError(</span><span class="s2">&quot;Not enough segments&quot;</span><span class="s1">) </span><span class="s0">from </span><span class="s1">err</span>
+
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">header_data = base64url_decode(header_segment)</span>
+        <span class="s0">except </span><span class="s1">(TypeError</span><span class="s0">, </span><span class="s1">binascii.Error) </span><span class="s0">as </span><span class="s1">err:</span>
+            <span class="s0">raise </span><span class="s1">DecodeError(</span><span class="s2">&quot;Invalid header padding&quot;</span><span class="s1">) </span><span class="s0">from </span><span class="s1">err</span>
+
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">header = json.loads(header_data)</span>
+        <span class="s0">except </span><span class="s1">ValueError </span><span class="s0">as </span><span class="s1">e:</span>
+            <span class="s0">raise </span><span class="s1">DecodeError(</span><span class="s2">f&quot;Invalid header string: </span><span class="s0">{</span><span class="s1">e</span><span class="s0">}</span><span class="s2">&quot;</span><span class="s1">) </span><span class="s0">from </span><span class="s1">e</span>
+
+        <span class="s0">if not </span><span class="s1">isinstance(header</span><span class="s0">, </span><span class="s1">dict):</span>
+            <span class="s0">raise </span><span class="s1">DecodeError(</span><span class="s2">&quot;Invalid header string: must be a json object&quot;</span><span class="s1">)</span>
+
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">payload = base64url_decode(payload_segment)</span>
+        <span class="s0">except </span><span class="s1">(TypeError</span><span class="s0">, </span><span class="s1">binascii.Error) </span><span class="s0">as </span><span class="s1">err:</span>
+            <span class="s0">raise </span><span class="s1">DecodeError(</span><span class="s2">&quot;Invalid payload padding&quot;</span><span class="s1">) </span><span class="s0">from </span><span class="s1">err</span>
+
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">signature = base64url_decode(crypto_segment)</span>
+        <span class="s0">except </span><span class="s1">(TypeError</span><span class="s0">, </span><span class="s1">binascii.Error) </span><span class="s0">as </span><span class="s1">err:</span>
+            <span class="s0">raise </span><span class="s1">DecodeError(</span><span class="s2">&quot;Invalid crypto padding&quot;</span><span class="s1">) </span><span class="s0">from </span><span class="s1">err</span>
+
+        <span class="s0">return </span><span class="s1">(payload</span><span class="s0">, </span><span class="s1">signing_input</span><span class="s0">, </span><span class="s1">header</span><span class="s0">, </span><span class="s1">signature)</span>
+
+    <span class="s0">def </span><span class="s1">_verify_signature(</span>
+        <span class="s1">self</span><span class="s0">,</span>
+        <span class="s1">signing_input: bytes</span><span class="s0">,</span>
+        <span class="s1">header: dict</span><span class="s0">,</span>
+        <span class="s1">signature: bytes</span><span class="s0">,</span>
+        <span class="s1">key: str = </span><span class="s2">&quot;&quot;</span><span class="s0">,</span>
+        <span class="s1">algorithms: list[str] | </span><span class="s0">None </span><span class="s1">= </span><span class="s0">None,</span>
+    <span class="s1">) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+
+        <span class="s1">alg = header.get(</span><span class="s2">&quot;alg&quot;</span><span class="s1">)</span>
+
+        <span class="s0">if not </span><span class="s1">alg </span><span class="s0">or </span><span class="s1">(algorithms </span><span class="s0">is not None and </span><span class="s1">alg </span><span class="s0">not in </span><span class="s1">algorithms):</span>
+            <span class="s0">raise </span><span class="s1">InvalidAlgorithmError(</span><span class="s2">&quot;The specified alg value is not allowed&quot;</span><span class="s1">)</span>
+
+        <span class="s0">try</span><span class="s1">:</span>
+            <span class="s1">alg_obj = self.get_algorithm_by_name(alg)</span>
+        <span class="s0">except </span><span class="s1">NotImplementedError </span><span class="s0">as </span><span class="s1">e:</span>
+            <span class="s0">raise </span><span class="s1">InvalidAlgorithmError(</span><span class="s2">&quot;Algorithm not supported&quot;</span><span class="s1">) </span><span class="s0">from </span><span class="s1">e</span>
+        <span class="s1">key = alg_obj.prepare_key(key)</span>
+
+        <span class="s0">if not </span><span class="s1">alg_obj.verify(signing_input</span><span class="s0">, </span><span class="s1">key</span><span class="s0">, </span><span class="s1">signature):</span>
+            <span class="s0">raise </span><span class="s1">InvalidSignatureError(</span><span class="s2">&quot;Signature verification failed&quot;</span><span class="s1">)</span>
+
+    <span class="s0">def </span><span class="s1">_validate_headers(self</span><span class="s0">, </span><span class="s1">headers: dict[str</span><span class="s0">, </span><span class="s1">Any]) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s0">if </span><span class="s2">&quot;kid&quot; </span><span class="s0">in </span><span class="s1">headers:</span>
+            <span class="s1">self._validate_kid(headers[</span><span class="s2">&quot;kid&quot;</span><span class="s1">])</span>
+
+    <span class="s0">def </span><span class="s1">_validate_kid(self</span><span class="s0">, </span><span class="s1">kid: str) -&gt; </span><span class="s0">None</span><span class="s1">:</span>
+        <span class="s0">if not </span><span class="s1">isinstance(kid</span><span class="s0">, </span><span class="s1">str):</span>
+            <span class="s0">raise </span><span class="s1">InvalidTokenError(</span><span class="s2">&quot;Key ID header parameter must be a string&quot;</span><span class="s1">)</span>
+
+
+<span class="s1">_jws_global_obj = PyJWS()</span>
+<span class="s1">encode = _jws_global_obj.encode</span>
+<span class="s1">decode_complete = _jws_global_obj.decode_complete</span>
+<span class="s1">decode = _jws_global_obj.decode</span>
+<span class="s1">register_algorithm = _jws_global_obj.register_algorithm</span>
+<span class="s1">unregister_algorithm = _jws_global_obj.unregister_algorithm</span>
+<span class="s1">get_algorithm_by_name = _jws_global_obj.get_algorithm_by_name</span>
+<span class="s1">get_unverified_header = _jws_global_obj.get_unverified_header</span>
+</pre>
+</body>
+</html>

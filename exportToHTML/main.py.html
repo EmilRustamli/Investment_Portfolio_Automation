@@ -1,0 +1,81 @@
+<html>
+<head>
+<title>main.py</title>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+.s0 { color: #cc7832;}
+.s1 { color: #a9b7c6;}
+.s2 { color: #6a8759;}
+.s3 { color: #808080;}
+.s4 { color: #6897bb;}
+</style>
+</head>
+<body bgcolor="#2b2b2b">
+<table CELLSPACING=0 CELLPADDING=5 COLS=1 WIDTH="100%" BGCOLOR="#606060" >
+<tr><td><center>
+<font face="Arial, Helvetica" color="#000000">
+main.py</font>
+</center></td></tr></table>
+<pre><span class="s0">import </span><span class="s1">requests</span>
+<span class="s0">import </span><span class="s1">datetime </span><span class="s0">as </span><span class="s1">dt</span>
+<span class="s0">import </span><span class="s1">os</span>
+<span class="s0">from </span><span class="s1">twilio.rest </span><span class="s0">import </span><span class="s1">Client</span>
+<span class="s0">import </span><span class="s1">re</span>
+
+<span class="s1">STOCK_NAME = </span><span class="s2">&quot;BTC&quot;</span>
+<span class="s1">COMPANY_NAME = </span><span class="s2">&quot;Bitcoin&quot;</span>
+
+<span class="s1">STOCK_ENDPOINT = </span><span class="s2">&quot;https://www.alphavantage.co/query&quot;</span>
+<span class="s1">NEWS_ENDPOINT = </span><span class="s2">&quot;https://newsapi.org/v2/everything&quot;</span>
+<span class="s1">ALPHA_VANTAGE_KEY = </span><span class="s2">&quot;4H3ZU72H7ZM8CLV0&quot;</span>
+<span class="s1">NEWS_KEY = </span><span class="s2">&quot;78f13d793479450596a4629bbebe5ab2&quot;</span>
+<span class="s1">STOCK_API = </span><span class="s2">f&quot;https://www.alphavantage.co/query?function=DIGITAL_CURRENCY_DAILY&amp;symbol=</span><span class="s0">{</span><span class="s1">STOCK_NAME</span><span class="s0">}</span><span class="s2">&amp;market=USD&amp;apikey=</span><span class="s0">{</span><span class="s1">ALPHA_VANTAGE_KEY</span><span class="s0">}</span><span class="s2">&quot;</span>
+<span class="s1">NEWS_API = </span><span class="s2">f&quot;https://newsapi.org/v2/everything?q=</span><span class="s0">{</span><span class="s1">COMPANY_NAME</span><span class="s0">}</span><span class="s2">&amp;apiKey=</span><span class="s0">{</span><span class="s1">NEWS_KEY</span><span class="s0">}</span><span class="s2">&quot;</span>
+<span class="s1">TWILIO_API = </span><span class="s2">&quot;twilio.com/docs/sms/quickstart/python&quot;</span>
+<span class="s1">ACCOUNT_SID = </span><span class="s2">&quot;ACa8b3c5ba164fdab5028ef168ddee7864&quot;</span>
+<span class="s1">AUTH_TOKEN = </span><span class="s2">&quot;514abd8a22f9c5bd229f247520b959f9&quot;</span>
+
+
+<span class="s3"># When stock price increase/decreases by 5% between yesterday and the day before yesterday then print(&quot;Get News&quot;).</span>
+<span class="s1">response = requests.get(STOCK_API).json()</span>
+
+<span class="s1">today = dt.datetime.now().date()  </span><span class="s3"># Because I am checking close values, most recent is yesterday</span>
+<span class="s1">yesterday = today - dt.timedelta(days=</span><span class="s4">1</span><span class="s1">)</span>
+
+<span class="s3"># Get Close Data for each Day</span>
+<span class="s1">today_close_data = float(response[</span><span class="s2">&quot;Time Series (Digital Currency Daily)&quot;</span><span class="s1">][str(today)][</span><span class="s2">&quot;4a. close (USD)&quot;</span><span class="s1">])</span>
+<span class="s1">yesterday_close_data = float(response[</span><span class="s2">&quot;Time Series (Digital Currency Daily)&quot;</span><span class="s1">][str(yesterday)][</span><span class="s2">&quot;4a. close (USD)&quot;</span><span class="s1">])</span>
+
+<span class="s3"># Calculate the difference by percentage</span>
+<span class="s1">difference = (yesterday_close_data-today_close_data)/yesterday_close_data</span>
+<span class="s0">if </span><span class="s1">difference &gt; </span><span class="s4">0</span><span class="s1">:</span>
+    <span class="s1">arrow = </span><span class="s2">&quot;🔺&quot;</span>
+<span class="s0">else</span><span class="s1">:</span>
+    <span class="s1">arrow = </span><span class="s2">&quot;🔻&quot;</span>
+
+<span class="s0">if </span><span class="s1">abs(difference) &gt;= </span><span class="s4">0.0001</span><span class="s1">:</span>
+    <span class="s1">response = requests.get(NEWS_API).json()</span>
+    <span class="s1">articles = response[</span><span class="s2">'articles'</span><span class="s1">][:</span><span class="s4">3</span><span class="s1">]  </span><span class="s3"># Top 3 articles with the company name</span>
+
+
+
+<span class="s3">#to send a separate message with each article's title and description to your phone number.</span>
+<span class="s1">titles = [articles[i][</span><span class="s2">&quot;title&quot;</span><span class="s1">] </span><span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range(</span><span class="s4">3</span><span class="s1">)]</span>
+<span class="s1">descriptions = [articles[i][</span><span class="s2">&quot;description&quot;</span><span class="s1">] </span><span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range(</span><span class="s4">3</span><span class="s1">)]</span>
+<span class="s1">links = [articles[i][</span><span class="s2">&quot;url&quot;</span><span class="s1">] </span><span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range(</span><span class="s4">3</span><span class="s1">)]</span>
+<span class="s3"># Send Messages</span>
+<span class="s1">client = Client(ACCOUNT_SID</span><span class="s0">, </span><span class="s1">AUTH_TOKEN)</span>
+<span class="s0">for </span><span class="s1">i </span><span class="s0">in </span><span class="s1">range(</span><span class="s4">3</span><span class="s1">):</span>
+    <span class="s1">text = </span><span class="s2">f&quot;</span><span class="s0">{</span><span class="s1">STOCK_NAME</span><span class="s0">}</span><span class="s2">: </span><span class="s0">{</span><span class="s1">arrow</span><span class="s0">}{</span><span class="s1">abs(round(difference*</span><span class="s4">100</span><span class="s0">, </span><span class="s4">3</span><span class="s1">))</span><span class="s0">}</span><span class="s2">%</span><span class="s0">\n</span><span class="s2">Headline:</span><span class="s0">{</span><span class="s1">titles[i]</span><span class="s0">}\n</span><span class="s2">Brief:</span><span class="s0">{</span><span class="s1">descriptions[i]</span><span class="s0">}\n</span><span class="s2">Read More: </span><span class="s0">{</span><span class="s1">links[i]</span><span class="s0">}</span><span class="s2">&quot;</span>
+    <span class="s1">text1 = re.sub(</span><span class="s2">r'&lt;a'</span><span class="s0">, </span><span class="s2">&quot;&quot;</span><span class="s0">, </span><span class="s1">text)</span>
+    <span class="s1">text2 = re.sub(</span><span class="s2">r'href\S+'</span><span class="s0">, </span><span class="s2">''</span><span class="s0">, </span><span class="s1">text1)</span>
+    <span class="s1">text3 = re.sub(</span><span class="s2">r'target=\S+'</span><span class="s0">, </span><span class="s2">''</span><span class="s0">, </span><span class="s1">text2)</span>
+    <span class="s1">text_final = re.sub(</span><span class="s2">r' +'</span><span class="s0">, </span><span class="s2">&quot; &quot;</span><span class="s0">, </span><span class="s1">text3)</span>
+    <span class="s1">message = client.messages.create(</span>
+      <span class="s1">body=text_final</span><span class="s0">,</span>
+      <span class="s1">from_=</span><span class="s2">'+13862516303'</span><span class="s0">,</span>
+      <span class="s1">to=</span><span class="s2">'+886966807842'</span>
+    <span class="s1">)</span>
+</pre>
+</body>
+</html>
